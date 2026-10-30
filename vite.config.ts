@@ -6,7 +6,6 @@ import { spawn } from 'child_process';
 import { Readable } from 'stream';
 
 const MAX_LRU_CACHE_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
-const previewCache = new Map<string, string>();
 
 function touchLru(filePath: string) {
   try {
@@ -215,165 +214,57 @@ function breezyAudioStreamerPlugin(): Plugin {
         const targetTemp = path.resolve(songsDir, `${cleanName}.tmp`);
         const query = `"${cleanArtist}" "${cleanTitle}" Topic`;
 
-        // 2. Ultra-Fast Instant Audio Handoff: Akamai/Apple Preview CDN (<50ms startup)
-        let instantPreviewUrl = previewCache.get(trackKey);
-        if (!instantPreviewUrl) {
-          try {
-            const searchRes = await fetch(
-              `https://itunes.apple.com/search?term=${encodeURIComponent(cleanArtist + ' ' + cleanTitle)}&entity=song&limit=1`,
-              { signal: AbortSignal.timeout(600) }
-            );
-            if (searchRes.ok) {
-              const data = await searchRes.json() as any;
-              if (data.results?.[0]?.previewUrl) {
-                instantPreviewUrl = data.results[0].previewUrl;
-                previewCache.set(trackKey, instantPreviewUrl);
-              }
-            }
-          } catch (err: any) {
-            console.log(`[Preview Cache Miss] ${err?.message || err}`);
+        // 2. Await in-flight download if already downloading
+        if (inFlightDownloads.has(trackKey)) {
+          console.log(`[Breezy Stream] Awaiting in-flight master download for: "${artist} - ${title}"...`);
+          await inFlightDownloads.get(trackKey);
+          if (fs.existsSync(targetMp3)) {
+            touchLru(targetMp3);
+            serveLocalRange(targetMp3, req, res);
+            return;
           }
         }
 
-        // Trigger background download of full master track if not already downloading
-        if (!inFlightDownloads.has(trackKey) && !fs.existsSync(targetMp3)) {
-          const bgPromise = new Promise<void>((resolve) => {
-            console.log(`[Breezy Stream] Starting background master download: "${artist} - ${title}"...`);
-            const bgProc = spawn('yt-dlp', [
-              '--no-check-certificates',
-              '--extractor-args', 'youtube:player_client=android,web',
-              '-f', 'ba[ext=m4a][abr<=160]/ba[abr<=160]/ba/b',
-              '-o', targetTemp,
-              `ytsearch1:${query}`
-            ]);
+        // 3. Download and stream FULL studio master track (NO 30s previews)
+        console.log(`[Breezy Stream] Fetching FULL master track on-demand: "${artist} - ${title}"...`);
+        const downloadPromise = new Promise<string | null>((resolve) => {
+          const dlProc = spawn('yt-dlp', [
+            '--no-check-certificates',
+            '--extractor-args', 'youtube:player_client=android,web',
+            '-f', 'ba[ext=m4a][abr<=160]/ba[abr<=160]/ba/b',
+            '-o', targetMp3,
+            `ytsearch1:${query}`
+          ]);
 
-            bgProc.on('close', (code) => {
-              inFlightDownloads.delete(trackKey);
-              if (code === 0 && fs.existsSync(targetTemp)) {
-                try {
-                  if (fs.existsSync(targetMp3)) fs.unlinkSync(targetMp3);
-                  fs.renameSync(targetTemp, targetMp3);
-                  touchLru(targetMp3);
-                  cleanLruCache(songsDir);
-                  console.log(`[Breezy Stream] Master audio saved to disk in background: ${targetMp3}`);
-                } catch {}
-              }
-              resolve();
-            });
-
-            bgProc.on('error', (err) => {
-              console.warn('[Breezy Background Download Error]', err.message);
-              inFlightDownloads.delete(trackKey);
-              resolve();
-            });
-          });
-
-          inFlightDownloads.set(trackKey, bgPromise as any);
-        }
-
-        // If instant preview is available, stream it immediately with HTTP 206 Range support!
-        if (instantPreviewUrl) {
-          try {
-            const previewHeaders: Record<string, string> = {};
-            if (req.headers.range) {
-              previewHeaders['Range'] = req.headers.range;
-            }
-
-            const previewRes = await fetch(instantPreviewUrl, {
-              headers: previewHeaders,
-              signal: AbortSignal.timeout(5000),
-            });
-
-            res.writeHead(previewRes.status, {
-              'Content-Type': previewRes.headers.get('content-type') || 'audio/mp4',
-              'Content-Length': previewRes.headers.get('content-length') || '',
-              'Content-Range': previewRes.headers.get('content-range') || '',
-              'Accept-Ranges': 'bytes',
-              'Access-Control-Allow-Origin': '*',
-              'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
-              'Access-Control-Allow-Headers': 'Range, Content-Type, Accept',
-              'Cache-Control': 'public, max-age=86400',
-            });
-
-            if (previewRes.body) {
-              Readable.fromWeb(previewRes.body as any).pipe(res);
-              return;
-            }
-          } catch (err: any) {
-            console.warn('[Breezy Preview Pipe Fallback]', err?.message || err);
-          }
-        }
-
-        // 3. Fallback: Direct real-time yt-dlp chunked pipe if preview not found
-        console.log(`[Breezy Stream] Real-time HTTP chunked pipe: "${artist} - ${title}"...`);
-
-        // Fast native stream (AAC 128k-160k for instant first-chunk startup)
-        const proc = spawn('yt-dlp', [
-          '--no-check-certificates',
-          '--extractor-args', 'youtube:player_client=android,web',
-          '-f', 'ba[ext=m4a][abr<=160]/ba[abr<=160]/ba/b',
-          '-o', '-',
-          `ytsearch1:${query}`
-        ]);
-
-        const fileStream = fs.createWriteStream(targetTemp);
-        let headersSent = false;
-
-        proc.stdout.on('data', (chunk) => {
-          fileStream.write(chunk);
-
-          if (!headersSent && !res.headersSent) {
-            headersSent = true;
-            res.writeHead(200, {
-              'Content-Type': 'audio/mp4',
-              'Transfer-Encoding': 'chunked',
-              'Accept-Ranges': 'bytes',
-              'Access-Control-Allow-Origin': '*',
-              'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
-              'Access-Control-Allow-Headers': 'Range, Content-Type, Accept',
-              'Cache-Control': 'no-cache',
-            });
-          }
-
-          if (!res.writableEnded) {
-            res.write(chunk);
-          }
-        });
-
-        proc.stdout.on('end', () => {
-          fileStream.end();
-          if (!res.writableEnded) {
-            res.end();
-          }
-        });
-
-        proc.on('close', (code) => {
-          if (code === 0 && fs.existsSync(targetTemp)) {
-            try {
-              if (fs.existsSync(targetMp3)) {
-                fs.unlinkSync(targetMp3);
-              }
-              fs.renameSync(targetTemp, targetMp3);
+          dlProc.on('close', (code) => {
+            inFlightDownloads.delete(trackKey);
+            if (code === 0 && fs.existsSync(targetMp3)) {
               touchLru(targetMp3);
               cleanLruCache(songsDir);
-              console.log(`[Breezy Stream] Master audio cached to disk: ${targetMp3}`);
-            } catch (err: any) {
-              console.warn('[Cache Rename Note]', err.message);
+              console.log(`[Breezy Stream] FULL master track saved: ${targetMp3}`);
+              resolve(targetMp3);
+            } else {
+              const local = findLocalSong(title, artist);
+              resolve(local);
             }
-          }
+          });
+
+          dlProc.on('error', (err) => {
+            console.error('[Breezy Stream Download Error]', err.message);
+            inFlightDownloads.delete(trackKey);
+            resolve(null);
+          });
         });
 
-        proc.on('error', (err) => {
-          console.error('[Breezy Stream Error]', err);
-          if (!headersSent && !res.headersSent) {
-            res.statusCode = 500;
-            res.end(JSON.stringify({ error: err.message }));
-          }
-        });
+        inFlightDownloads.set(trackKey, downloadPromise);
+        const savedPath = await downloadPromise;
 
-        req.on('close', () => {
-          // If client disconnects or aborts, let proc finish saving file in background!
-        });
+        if (savedPath && fs.existsSync(savedPath)) {
+          serveLocalRange(savedPath, req, res);
+        } else {
+          res.statusCode = 404;
+          res.end(`Full track for "${artist} - ${title}" could not be downloaded.`);
+        }
       });
     }
   };

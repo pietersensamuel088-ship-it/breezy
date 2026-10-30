@@ -40,30 +40,6 @@ app.get('/api/stream', async (req, res) => {
     const result = await getOrDownloadTrack(String(title), String(artist));
     if (result.type === 'file') {
       streamAudioFile(result.path, req, res);
-    } else if (result.type === 'preview') {
-      const previewHeaders = {};
-      if (req.headers.range) previewHeaders['Range'] = req.headers.range;
-      const previewRes = await fetch(result.url, {
-        headers: previewHeaders,
-        signal: AbortSignal.timeout(5000),
-      });
-
-      res.writeHead(previewRes.status, {
-        'Content-Type': previewRes.headers.get('content-type') || 'audio/mp4',
-        'Content-Length': previewRes.headers.get('content-length') || '',
-        'Content-Range': previewRes.headers.get('content-range') || '',
-        'Accept-Ranges': 'bytes',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
-        'Access-Control-Allow-Headers': 'Range, Content-Type, Accept',
-        'Cache-Control': 'public, max-age=86400',
-      });
-
-      if (previewRes.body) {
-        Readable.fromWeb(previewRes.body).pipe(res);
-      } else {
-        res.end();
-      }
     } else if (result.type === 'redirect') {
       res.writeHead(302, {
         'Location': result.url,

@@ -39,7 +39,7 @@ export function App() {
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Recently Listened History Queue for LineSidebar
+  // Recently Listened History Queue for LineSidebar (Maintains stable positions while playing)
   const [historySongs, setHistorySongs] = useState<Song[]>([
     FEATURED_ALBUMS[0].songs[0], // Under the Influence
     FEATURED_ALBUMS[0].songs[1], // Call Me Every Day
@@ -76,8 +76,11 @@ export function App() {
     albumId: alb.id
   }));
 
-  // Format labels for LineSidebar: "Song Title — Album"
-  const historyLabels = historySongs.map((s) => `${s.title} — ${s.album}`);
+  // Format labels for LineSidebar: "Song Title • Album"
+  const historyLabels = historySongs.map((s) => `${s.title} • ${s.album}`);
+
+  // Which index in history matches the current playing song
+  const activeHistoryIndex = historySongs.findIndex((s) => s.id === currentSong.id);
 
   // Playback volume handling
   useEffect(() => {
@@ -88,6 +91,14 @@ export function App() {
     }
   }, [volume, isMuted]);
 
+  // Commit a song to #1 in recently played (called when completed or finished)
+  const commitSongToHistory = (song: Song) => {
+    setHistorySongs((prev) => {
+      const filtered = prev.filter((s) => s.id !== song.id);
+      return [song, ...filtered];
+    });
+  };
+
   // Track timer loop
   useEffect(() => {
     let interval: number;
@@ -95,6 +106,8 @@ export function App() {
       interval = window.setInterval(() => {
         setCurrentTime((prev) => {
           if (prev >= duration) {
+            // When song finishes, commit it to #1 in history
+            commitSongToHistory(currentSong);
             handleNext();
             return 0;
           }
@@ -103,7 +116,7 @@ export function App() {
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [isPlaying, duration]);
+  }, [isPlaying, duration, currentSong]);
 
   const togglePlay = () => {
     if (isPlaying) {
@@ -119,22 +132,31 @@ export function App() {
     }
   };
 
-  const playSong = (song: Song) => {
+  const playSong = (song: Song, shouldNavigateToAlbum = false) => {
+    // If we've listened to the previous song for more than 10 seconds, move previous to #1
+    if (currentTime > 10 && currentSong.id !== song.id) {
+      commitSongToHistory(currentSong);
+    }
+
     setCurrentSong(song);
     setCurrentTime(0);
     setDuration(song.duration);
     setIsPlaying(true);
 
-    // Add to history list at the top (avoid duplicates)
-    setHistorySongs((prev) => {
-      const filtered = prev.filter((s) => s.id !== song.id);
-      return [song, ...filtered];
-    });
+    // Automatically navigate to the song's album
+    const matchingAlbumIdx = albums.findIndex(
+      (a) => a.title.toLowerCase() === song.album.toLowerCase() ||
+             a.id.toLowerCase().includes(song.album.toLowerCase()) ||
+             song.album.toLowerCase().includes(a.title.toLowerCase())
+    );
 
-    // Also match the carousel to the song's album
-    const matchingAlbumIdx = albums.findIndex((a) => a.title === song.album || a.id.includes(song.album.toLowerCase()));
     if (matchingAlbumIdx !== -1) {
       setSelectedAlbumIndex(matchingAlbumIdx);
+    }
+
+    // Go to album view if requested or clicked from recently played
+    if (shouldNavigateToAlbum) {
+      setViewMode('album');
     }
 
     audioSynth.startRhythm(song.genre);
@@ -301,7 +323,7 @@ export function App() {
         {/* VIEW 1: HOME PAGE — EXPANDED 3D CAROUSEL + REACT BITS LINESIDEBAR ON THE SIDE */}
         {viewMode === 'home' && !filteredSongs && (
           <div className="relative w-full h-full flex items-center justify-between px-4 lg:px-8 select-none animate-fadeIn">
-            {/* LEFT SIDE: REACT BITS LINESIDEBAR (ULTRA-SMOOTH PROXIMITY LISTENING HISTORY) */}
+            {/* LEFT SIDE: REACT BITS LINESIDEBAR (RECENT LISTENING HISTORY) */}
             <aside className="hidden lg:flex flex-col justify-center w-80 h-[520px] z-30 pointer-events-auto shrink-0 pl-4">
               <div className="flex items-center gap-2 px-2 mb-4 text-zinc-400 font-mono text-[10px] tracking-[0.2em] uppercase">
                 <History className="w-3.5 h-3.5 text-luxury-gold" />
@@ -325,16 +347,19 @@ export function App() {
                   itemGap={22}
                   fontSize={0.9}
                   smoothing={110}
-                  defaultActive={0}
+                  defaultActive={activeHistoryIndex !== -1 ? activeHistoryIndex : 0}
                   onItemClick={(index) => {
                     const selected = historySongs[index];
-                    if (selected) playSong(selected);
+                    if (selected) {
+                      // Stays at this index while playing, and automatically navigates to the album!
+                      playSong(selected, true);
+                    }
                   }}
                 />
               </div>
 
               <div className="px-2 mt-4 text-[9px] font-mono text-zinc-600 tracking-wider">
-                Hover lines to trace &bull; Click track to play
+                Hover to trace &bull; Click to open album & play
               </div>
             </aside>
 

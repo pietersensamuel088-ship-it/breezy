@@ -12,6 +12,8 @@ export const LightningEffect: React.FC<LightningEffectProps> = ({
   trackTitle,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
 
   useEffect(() => {
     if (!active) return;
@@ -25,8 +27,18 @@ export const LightningEffect: React.FC<LightningEffectProps> = ({
     canvas.height = window.innerHeight;
 
     let animationFrameId: number;
+    let completed = false;
     const startTime = performance.now();
-    const duration = 550; // ms
+    const duration = 450; // ms
+
+    // Safety timeout: ensure effect ends and resets in 500ms max
+    const timer = setTimeout(() => {
+      if (!completed) {
+        completed = true;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        onCompleteRef.current?.();
+      }
+    }, 500);
 
     // Generate random branched lightning bolt points
     interface Point {
@@ -148,17 +160,21 @@ export const LightningEffect: React.FC<LightningEffectProps> = ({
 
         animationFrameId = requestAnimationFrame(render);
       } else {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        if (onComplete) onComplete();
+        if (!completed) {
+          completed = true;
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          onCompleteRef.current?.();
+        }
       }
     };
 
     animationFrameId = requestAnimationFrame(render);
 
     return () => {
+      clearTimeout(timer);
       cancelAnimationFrame(animationFrameId);
     };
-  }, [active, onComplete]);
+  }, [active]);
 
   if (!active) return null;
 

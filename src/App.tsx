@@ -188,9 +188,16 @@ export function App() {
   const [lightningActive, setLightningActive] = useState<boolean>(false);
   const [lightningTrack, setLightningTrack] = useState<string>('');
 
-  // Prefetch a track to Proxmox/server disk immediately in the background
+  // Prefetch a track to browser RAM audio buffer AND Proxmox/server disk immediately in the background
   const prefetchSong = useCallback((song: Song) => {
     try {
+      // 1. Preload directly into browser audio memory (HTML5 Audio object preloading)
+      const preloadAudio = new Audio();
+      preloadAudio.preload = 'auto';
+      preloadAudio.src = song.audioUrl;
+      preloadAudio.load();
+
+      // 2. Pre-cache on the backend server
       fetch(song.audioUrl, {
         method: 'GET',
         headers: { Range: 'bytes=0-1024' },
@@ -198,6 +205,10 @@ export function App() {
     } catch {
       // silent
     }
+  }, []);
+
+  const handleLightningComplete = useCallback(() => {
+    setLightningActive(false);
   }, []);
 
   const addToQueue = useCallback((song: Song) => {
@@ -1256,7 +1267,7 @@ export function App() {
       <LightningEffect
         active={lightningActive}
         trackTitle={lightningTrack}
-        onComplete={() => setLightningActive(false)}
+        onComplete={handleLightningComplete}
       />
 
       {/* REAL HIGH-FIDELITY HTML5 AUDIO ENGINE */}

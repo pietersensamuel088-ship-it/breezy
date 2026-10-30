@@ -52,44 +52,43 @@ export async function getOrDownloadTrack(title, artist) {
   const targetFlac = path.join(MUSIC_DIR, `${cleanName}.flac`);
 
   // 1. If already saved on Proxmox disk, return immediately!
-  if (fs.existsSync(targetFlac)) return targetFlac;
-  if (fs.existsSync(targetMp3)) return targetMp3;
+  if (fs.existsSync(targetFlac)) return { type: 'file', path: targetFlac };
+  if (fs.existsSync(targetMp3)) return { type: 'file', path: targetMp3 };
 
   // 2. Search local storage / nicsongs subdirectories (requiring BOTH artist and title)
   const localMatch = findExistingTrack(MUSIC_DIR, title, artist);
   if (localMatch) {
     console.log(`[Proxmox Storage] Found local master track: ${localMatch}`);
-    return localMatch;
+    return { type: 'file', path: localMatch };
   }
 
-  console.log(`[Proxmox Downloader] Auto-fetching FULL studio master track: "${artist} - ${title}"...`);
+  console.log(`[Proxmox Downloader] Instant CDN Lookahead for: "${artist} - ${title}"...`);
+  const cleanArtist = artist.replace(/["'$`\\]/g, '');
+  const cleanTitle = title.replace(/["'$`\\]/g, '');
+  const query = `${cleanArtist} ${cleanTitle} official audio`;
 
-  // 3. Headless Download via yt-dlp (Downloads 100% FULL UNABRIDGED SONG in high-bitrate)
-  return new Promise((resolve, reject) => {
-    const cleanArtist = artist.replace(/["'$`\\]/g, '');
-    const cleanTitle = title.replace(/["'$`\\]/g, '');
-    const query = `${cleanArtist} ${cleanTitle} official audio`;
-    const command = `yt-dlp --no-check-certificates --extractor-args "youtube:player_client=android,web" -x --audio-format mp3 --audio-quality 0 "ytsearch1:${query}" -o "${targetMp3}"`;
+  // Start background download of permanent high-bitrate master MP3
+  const downloadCmd = `yt-dlp --no-check-certificates --extractor-args "youtube:player_client=android,web" -x --audio-format mp3 --audio-quality 0 "ytsearch1:${query}" -o "${targetMp3}"`;
+  exec(downloadCmd, { timeout: 60000 }, (error) => {
+    if (!error && fs.existsSync(targetMp3)) {
+      console.log(`[Proxmox Storage] Master MP3 cached: ${targetMp3}`);
+    }
+  });
 
-    exec(command, { timeout: 60000 }, (error, stdout, stderr) => {
-      if (!error && fs.existsSync(targetMp3)) {
-        console.log(`[Proxmox Downloader] Successfully saved FULL track to Proxmox: ${targetMp3}`);
-        resolve(targetMp3);
-      } else {
-        console.warn(`[Proxmox Downloader] yt-dlp notice:`, stderr || error?.message);
-        // Check if file was saved under alternative name or if target exists
-        if (fs.existsSync(targetMp3)) {
-          resolve(targetMp3);
-        } else {
-          // Check if local track for this song exists (requiring BOTH artist and title)
-          const local = findExistingTrack(MUSIC_DIR, title, artist);
-          if (local) {
-            resolve(local);
-          } else {
-            reject(new Error(`Song "${title}" by "${artist}" could not be downloaded.`));
-          }
+  // Fetch direct streaming URL for instant sub-second playback
+  return new Promise((resolve) => {
+    const directCmd = `yt-dlp --no-check-certificates --extractor-args "youtube:player_client=android,web" -f "ba/b" -g "ytsearch1:${query}"`;
+    exec(directCmd, { timeout: 12000 }, (err, stdout) => {
+      if (!err && stdout) {
+        const url = stdout.trim().split('\n').filter((l) => l.startsWith('http'))[0];
+        if (url) {
+          return resolve({ type: 'redirect', url });
         }
       }
+      if (fs.existsSync(targetMp3)) {
+        return resolve({ type: 'file', path: targetMp3 });
+      }
+      resolve({ type: 'not_found' });
     });
   });
 }

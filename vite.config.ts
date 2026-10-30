@@ -75,33 +75,47 @@ function breezyAudioStreamerPlugin(): Plugin {
         // 1. Check local nicsongs library
         let filePath = findLocalSong(title, artist);
 
-        // 2. If not yet downloaded on PC, autonomously download full master track via yt-dlp!
+        // 2. If not yet downloaded on PC, fetch direct audio stream URL and download full MP3 in background!
         if (!filePath || !fs.existsSync(filePath)) {
-          console.log(`[Breezy Stream] Auto-downloading full studio track: "${artist} - ${title}"...`);
+          const cleanArtist = artist.replace(/["'$`\\]/g, '');
+          const cleanTitle = title.replace(/["'$`\\]/g, '');
           const cleanName = `${artist}_${title}`.replace(/[^a-zA-Z0-9_\-\.]/g, '_').toLowerCase();
           const targetMp3 = path.resolve(__dirname, 'nicsongs', `${cleanName}.mp3`);
+          const query = `${cleanArtist} ${cleanTitle} official audio`;
+
+          console.log(`[Breezy Stream] Instant CDN Lookahead for: "${artist} - ${title}"...`);
 
           try {
-            await new Promise<void>((resolve, reject) => {
-              const cleanArtist = artist.replace(/["'$`\\]/g, '');
-              const cleanTitle = title.replace(/["'$`\\]/g, '');
-              const query = `${cleanArtist} ${cleanTitle} official audio`;
-              const cmd = `yt-dlp --no-check-certificates --extractor-args "youtube:player_client=android,web" -x --audio-format mp3 --audio-quality 0 "ytsearch1:${query}" -o "${targetMp3}"`;
-              exec(cmd, { timeout: 60000 }, (error) => {
-                if (!error && fs.existsSync(targetMp3)) {
-                  resolve();
-                } else {
-                  reject(error || new Error('Download failed'));
+            // A. Grab high-speed direct CDN stream URL for instant sub-second playback
+            const directUrl = await new Promise<string | null>((resolve) => {
+              const cmd = `yt-dlp --no-check-certificates --extractor-args "youtube:player_client=android,web" -f "ba/b" -g "ytsearch1:${query}"`;
+              exec(cmd, { timeout: 12000 }, (error, stdout) => {
+                if (!error && stdout) {
+                  const url = stdout.trim().split('\n').filter((l) => l.startsWith('http'))[0];
+                  if (url) return resolve(url);
                 }
+                resolve(null);
               });
             });
 
-            if (fs.existsSync(targetMp3)) {
-              filePath = targetMp3;
-              console.log(`[Breezy Stream] Download complete: ${filePath}`);
+            // B. In the background, ensure full master MP3 is downloaded & stored in nicsongs
+            const downloadCmd = `yt-dlp --no-check-certificates --extractor-args "youtube:player_client=android,web" -x --audio-format mp3 --audio-quality 0 "ytsearch1:${query}" -o "${targetMp3}"`;
+            exec(downloadCmd, { timeout: 60000 }, (err) => {
+              if (!err && fs.existsSync(targetMp3)) {
+                console.log(`[Breezy Stream] Background master download completed: ${targetMp3}`);
+              }
+            });
+
+            // C. If direct CDN URL acquired, redirect client for INSTANT playback!
+            if (directUrl) {
+              res.statusCode = 302;
+              res.setHeader('Location', directUrl);
+              res.setHeader('Access-Control-Allow-Origin', '*');
+              res.end();
+              return;
             }
           } catch (err: any) {
-            console.warn(`[Breezy Stream] Autonomous download notice:`, err?.message);
+            console.warn(`[Breezy Stream] Direct CDN stream fallback notice:`, err?.message);
           }
         }
 

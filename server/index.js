@@ -36,12 +36,18 @@ app.get('/api/stream', async (req, res) => {
   const { title = 'Under the Influence', artist = 'Chris Brown' } = req.query;
 
   try {
-    // Proxmox server checks local disk or downloads autonomously
-    const trackPath = await getOrDownloadTrack(String(title), String(artist));
-    if (!trackPath || !fs.existsSync(trackPath)) {
-      return res.status(404).send(`Track "${title}" by "${artist}" not found.`);
+    const result = await getOrDownloadTrack(String(title), String(artist));
+    if (result.type === 'file') {
+      streamAudioFile(result.path, req, res);
+    } else if (result.type === 'redirect') {
+      res.writeHead(302, {
+        'Location': result.url,
+        'Access-Control-Allow-Origin': '*',
+      });
+      res.end();
+    } else {
+      res.status(404).send(`Track "${title}" by "${artist}" not found.`);
     }
-    streamAudioFile(trackPath, req, res);
   } catch (err) {
     console.error('[Stream Error]', err?.message || err);
     res.status(500).send(`Streaming error on Proxmox backend: ${err?.message || err}`);

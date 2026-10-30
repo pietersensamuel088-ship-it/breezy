@@ -18,7 +18,9 @@ import {
   Download,
   Search,
   Sparkles,
-  Sliders
+  ArrowLeft,
+  Disc3,
+  Layers
 } from 'lucide-react';
 
 export function App() {
@@ -33,6 +35,9 @@ export function App() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isVolumeHovered, setIsVolumeHovered] = useState<boolean>(false);
   const volumeLeaveTimeout = useRef<number | null>(null);
+
+  // View state: 'home' (Pure Fullscreen Carousel) vs 'album' (Split detail track view)
+  const [viewMode, setViewMode] = useState<'home' | 'album'>('home');
 
   // Modals
   const [isDownloaderOpen, setIsDownloaderOpen] = useState<boolean>(false);
@@ -140,13 +145,13 @@ export function App() {
     }, 450);
   };
 
-  // Filter songs based on search
-  const displayedSongs = searchQuery.trim() === ''
-    ? selectedAlbum.songs
-    : ALL_SONGS.filter(s =>
+  // Filter songs if searching
+  const filteredSongs = searchQuery.trim() !== ''
+    ? ALL_SONGS.filter(s =>
         s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         s.artist.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+      )
+    : null;
 
   return (
     <div
@@ -155,7 +160,7 @@ export function App() {
         '--glow-color': currentSong.accentColor,
       } as React.CSSProperties}
     >
-      {/* Background Ambience */}
+      {/* Background Cinematic Aura */}
       <div
         className="absolute -top-32 -left-32 w-[700px] h-[700px] rounded-full blur-[180px] opacity-25 pointer-events-none transition-all duration-1000"
         style={{ backgroundColor: currentSong.accentColor }}
@@ -167,9 +172,12 @@ export function App() {
 
       {/* TOP BAR / MINIMALIST LINE HEADER */}
       <header className="relative z-30 h-20 px-8 flex items-center justify-between shrink-0">
-        {/* Bold Squishy BREEZY Brand (Unbounded font) */}
-        <div className="flex items-center gap-3">
-          <span className="font-unbounded font-black text-2xl md:text-3xl tracking-tighter text-white drop-shadow-[0_0_20px_rgba(255,255,255,0.3)]">
+        {/* Bold Squishy BREEZY Brand */}
+        <div
+          onClick={() => { setViewMode('home'); setSearchQuery(''); }}
+          className="flex items-center gap-3 cursor-pointer group"
+        >
+          <span className="font-unbounded font-black text-2xl md:text-3xl tracking-tighter text-white drop-shadow-[0_0_20px_rgba(255,255,255,0.3)] group-hover:scale-105 transition-transform">
             BREEZY
           </span>
           <span className="text-[10px] font-mono tracking-[0.2em] uppercase text-zinc-500 hidden sm:inline">
@@ -191,6 +199,16 @@ export function App() {
 
         {/* Action Controls */}
         <div className="flex items-center gap-4">
+          {viewMode === 'album' && (
+            <button
+              onClick={() => setViewMode('home')}
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-mono text-zinc-300 hover:text-white transition-all hover:scale-105 active:scale-95"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>CAROUSEL</span>
+            </button>
+          )}
+
           <button
             onClick={() => setIsDownloaderOpen(true)}
             className="group flex items-center gap-2 px-4 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.1] border border-white/10 text-xs font-mono text-zinc-300 hover:text-white transition-all duration-300 hover:scale-105 active:scale-95"
@@ -201,126 +219,195 @@ export function App() {
         </div>
       </header>
 
-      {/* MAIN SCROLLABLE BODY */}
-      <main className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden flex flex-col pb-28">
-        {/* REACT BITS CIRCULAR CAROUSEL STAGE */}
-        <div className="relative w-full h-[520px] md:h-[560px] flex flex-col items-center justify-center overflow-visible select-none">
-          {/* Spotlight Source & Cone */}
-          <div
-            className="absolute top-4 left-1/2 -translate-x-1/2 w-48 h-2 rounded-full blur-md opacity-80 z-20 pointer-events-none transition-colors duration-700"
-            style={{ backgroundColor: selectedAlbum.accentColor, boxShadow: `0 0 60px 15px ${selectedAlbum.accentColor}` }}
-          />
+      {/* MAIN SCREEN STAGE */}
+      <main className="relative z-10 flex-1 overflow-hidden flex flex-col justify-center pb-24">
+        {/* VIEW 1: HOME PAGE — PURE FULLSCREEN CAROUSEL WITH ZERO JANK */}
+        {viewMode === 'home' && !filteredSongs && (
+          <div className="relative w-full h-full flex flex-col items-center justify-center select-none animate-fadeIn">
+            {/* Elevated Table Pedestal Under-Shadow */}
+            <div
+              className="absolute bottom-16 left-1/2 -translate-x-1/2 w-[720px] max-w-[85vw] h-12 rounded-full blur-2xl opacity-60 pointer-events-none transition-colors duration-700"
+              style={{
+                backgroundColor: '#000000',
+                boxShadow: `0 40px 100px 30px rgba(0,0,0,0.98), 0 0 50px 10px ${selectedAlbum.accentColor}20`
+              }}
+            />
 
-          <CircularCarousel
-            items={carouselItems}
-            preset="cylinder"
-            intro="assemble"
-            cardWidth={240}
-            aspectRatio={1}
-            speed={10}
-            captions={true}
-            gap={45}
-            tilt={-3}
-            perspective={2100}
-            momentum={0.65}
-            snap={true}
-            parallax={0.35}
-            stretch={0.45}
-            fadeColor="#050608"
-            cornerRadius={22}
-            onChange={(index) => {
-              setSelectedAlbumIndex(index);
-              if (albums[index] && albums[index].songs.length > 0) {
-                setCurrentSong(albums[index].songs[0]);
-              }
-            }}
-            onItemClick={(item, index) => {
-              setSelectedAlbumIndex(index);
-              if (albums[index] && albums[index].songs.length > 0) {
-                playSong(albums[index].songs[0]);
-              }
-            }}
-            className="w-full h-full"
-          />
-        </div>
+            {/* Top Spotlight Fixture & Cone */}
+            <div
+              className="absolute top-2 left-1/2 -translate-x-1/2 w-52 h-2 rounded-full blur-md opacity-80 z-20 pointer-events-none transition-colors duration-700"
+              style={{
+                backgroundColor: selectedAlbum.accentColor,
+                boxShadow: `0 0 70px 20px ${selectedAlbum.accentColor}`
+              }}
+            />
 
-        {/* TRACKLIST CONTAINER */}
-        <div className="w-full max-w-4xl mx-auto px-6 pt-2 space-y-4">
-          <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
-            <div>
-              <h3 className="text-xl md:text-2xl font-unbounded font-bold tracking-tight text-white">
-                {selectedAlbum.title}
-              </h3>
-              <p className="text-xs text-zinc-400 font-sans mt-0.5">
-                {selectedAlbum.artist} &bull; {selectedAlbum.tracksCount} Master Tracks &bull; {selectedAlbum.description}
-              </p>
+            {/* The Big, Beautiful React Bits CircularCarousel */}
+            <div className="w-full h-[580px] max-h-[75vh] flex items-center justify-center">
+              <CircularCarousel
+                items={carouselItems}
+                preset="cylinder"
+                intro="assemble"
+                cardWidth={290}
+                aspectRatio={1}
+                speed={8}
+                captions={true}
+                gap={50}
+                tilt={-4}
+                perspective={2200}
+                momentum={0.65}
+                snap={true}
+                parallax={0.35}
+                stretch={0.4}
+                fadeColor="#050608"
+                cornerRadius={28}
+                onChange={(index) => {
+                  setSelectedAlbumIndex(index);
+                  if (albums[index] && albums[index].songs.length > 0) {
+                    setCurrentSong(albums[index].songs[0]);
+                  }
+                }}
+                onItemClick={(item, index) => {
+                  setSelectedAlbumIndex(index);
+                  // Clicking an album slides to tracklist
+                  setViewMode('album');
+                }}
+                className="w-full h-full"
+              />
             </div>
-            <div className="flex items-center gap-2">
-              <span className="px-3 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] font-mono uppercase text-white/80 tracking-wider">
-                FLAC 24-Bit / 96kHz
-              </span>
+
+            {/* Interactive Invitation Badge */}
+            <div
+              onClick={() => setViewMode('album')}
+              className="group cursor-pointer inline-flex items-center gap-2.5 px-5 py-2 rounded-full bg-white/[0.04] hover:bg-white/[0.1] border border-white/10 hover:border-white/25 backdrop-blur-md text-xs font-mono tracking-wider text-zinc-300 hover:text-white transition-all duration-300 hover:scale-105 active:scale-95 z-30 -mt-2"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-luxury-gold group-hover:rotate-12 transition-transform" />
+              <span>CLICK ALBUM TO EXPLORE TRACKS</span>
             </div>
           </div>
+        )}
 
-          {/* Songs List */}
-          <div className="space-y-2">
-            {displayedSongs.map((song, index) => {
-              const isCurrent = currentSong.id === song.id;
-              return (
-                <div
-                  key={song.id}
-                  onClick={() => playSong(song)}
-                  className={`group relative flex items-center justify-between px-5 py-3.5 rounded-2xl cursor-pointer transition-all duration-300 ${
-                    isCurrent
-                      ? 'bg-white/10 border border-white/20 shadow-[0_10px_30px_rgba(0,0,0,0.6)] backdrop-blur-md'
-                      : 'hover:bg-white/5 border border-transparent hover:border-white/5'
-                  }`}
+        {/* VIEW 2: ALBUM DETAIL VIEW (SLIDES TO SIDE & DISPLAYS TRACKS) */}
+        {(viewMode === 'album' || filteredSongs) && (
+          <div className="relative w-full h-full max-w-6xl mx-auto px-8 flex flex-col md:flex-row items-center justify-between gap-10 overflow-y-auto pt-4 pb-12 animate-fadeIn">
+            {/* Left: Showcase Pedestal of Active Album */}
+            <div className="w-full md:w-80 shrink-0 flex flex-col items-center md:items-start space-y-5 text-center md:text-left">
+              <button
+                onClick={() => setViewMode('home')}
+                className="inline-flex items-center gap-2 text-xs font-mono text-zinc-400 hover:text-white transition-colors py-1"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Return to Exhibition</span>
+              </button>
+
+              <div
+                className="relative w-64 h-64 md:w-76 md:h-76 rounded-3xl overflow-hidden shadow-[0_30px_70px_rgba(0,0,0,0.9)] border border-white/15 group"
+                style={{
+                  boxShadow: `0 35px 80px -15px rgba(0,0,0,0.95), 0 0 35px ${selectedAlbum.accentColor}35`
+                }}
+              >
+                <img
+                  src={selectedAlbum.coverUrl}
+                  alt={selectedAlbum.title}
+                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                />
+
+                <button
+                  onClick={() => {
+                    if (selectedAlbum.songs.length > 0) {
+                      playSong(selectedAlbum.songs[0]);
+                    }
+                  }}
+                  className="absolute inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300"
                 >
-                  <div className="flex items-center gap-4">
-                    <span className="w-5 text-center text-xs font-mono text-zinc-500 group-hover:text-white transition-colors">
-                      {isCurrent && isPlaying ? (
-                        <div className="flex items-end justify-center gap-0.5 h-3.5">
-                          <span className="w-0.5 h-full bg-white animate-pulse" />
-                          <span className="w-0.5 h-2 bg-white animate-pulse delay-75" />
-                          <span className="w-0.5 h-3 bg-white animate-pulse delay-150" />
-                        </div>
-                      ) : (
-                        index + 1
-                      )}
-                    </span>
+                  <div className="w-16 h-16 rounded-full bg-white text-black flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-transform">
+                    <Play className="w-7 h-7 fill-black ml-1" />
+                  </div>
+                </button>
+              </div>
 
-                    <img
-                      src={song.coverUrl}
-                      alt=""
-                      className="w-11 h-11 rounded-xl object-cover shadow-md border border-white/10 transition-transform duration-300 group-hover:scale-105"
-                    />
+              <div>
+                <h2 className="text-2xl md:text-3xl font-unbounded font-bold tracking-tight text-white">
+                  {selectedAlbum.title}
+                </h2>
+                <p className="text-sm font-sans text-zinc-400 mt-1">
+                  {selectedAlbum.artist} &bull; {selectedAlbum.year}
+                </p>
+                <p className="text-xs text-zinc-500 font-sans mt-2 line-clamp-3 leading-relaxed">
+                  {selectedAlbum.description}
+                </p>
+              </div>
+            </div>
 
-                    <div>
-                      <h4
-                        className={`text-sm font-semibold tracking-wide transition-colors ${
-                          isCurrent ? 'text-white font-bold' : 'text-zinc-300 group-hover:text-white'
-                        }`}
-                      >
-                        {song.title}
-                      </h4>
-                      <p className="text-xs text-zinc-500 font-mono mt-0.5">{song.artist}</p>
+            {/* Right: Smooth Sliding Tracklist */}
+            <div className="flex-1 w-full max-h-[68vh] overflow-y-auto space-y-2 pr-2">
+              <div className="flex items-center justify-between border-b border-white/[0.08] pb-3 mb-3">
+                <span className="text-xs font-mono uppercase tracking-[0.2em] text-zinc-400">
+                  {filteredSongs ? `Search Results (${filteredSongs.length})` : 'Master Studio Tracks'}
+                </span>
+                <span className="text-xs font-mono text-zinc-400">
+                  {filteredSongs ? '' : `${selectedAlbum.songs.length} Tracks`}
+                </span>
+              </div>
+
+              {(filteredSongs || selectedAlbum.songs).map((song, index) => {
+                const isCurrent = currentSong.id === song.id;
+                return (
+                  <div
+                    key={song.id}
+                    onClick={() => playSong(song)}
+                    className={`group relative flex items-center justify-between px-5 py-4 rounded-2xl cursor-pointer transition-all duration-300 ${
+                      isCurrent
+                        ? 'bg-white/10 border border-white/20 shadow-[0_10px_30px_rgba(0,0,0,0.6)] backdrop-blur-md'
+                        : 'hover:bg-white/5 border border-transparent hover:border-white/5'
+                    }`}
+                  >
+                    <div className="flex items-center gap-4">
+                      <span className="w-5 text-center text-xs font-mono text-zinc-500 group-hover:text-white transition-colors">
+                        {isCurrent && isPlaying ? (
+                          <div className="flex items-end justify-center gap-0.5 h-3.5">
+                            <span className="w-0.5 h-full bg-white animate-pulse" />
+                            <span className="w-0.5 h-2 bg-white animate-pulse delay-75" />
+                            <span className="w-0.5 h-3 bg-white animate-pulse delay-150" />
+                          </div>
+                        ) : (
+                          index + 1
+                        )}
+                      </span>
+
+                      <img
+                        src={song.coverUrl}
+                        alt=""
+                        className="w-11 h-11 rounded-xl object-cover shadow-md border border-white/10 transition-transform duration-300 group-hover:scale-105"
+                      />
+
+                      <div>
+                        <h4
+                          className={`text-sm font-semibold tracking-wide transition-colors ${
+                            isCurrent ? 'text-white font-bold' : 'text-zinc-300 group-hover:text-white'
+                          }`}
+                        >
+                          {song.title}
+                        </h4>
+                        <p className="text-xs text-zinc-500 font-mono mt-0.5">{song.artist}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-5">
+                      <span className="hidden sm:inline-block px-2.5 py-0.5 rounded-md text-[10px] font-mono tracking-wider bg-white/5 text-zinc-400 border border-white/5">
+                        {song.bitrate}
+                      </span>
+
+                      <span className="text-xs font-mono text-zinc-400">
+                        {formatTime(song.duration)}
+                      </span>
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-5">
-                    <span className="hidden sm:inline-block px-2.5 py-0.5 rounded-md text-[10px] font-mono tracking-wider bg-white/5 text-zinc-400 border border-white/5">
-                      {song.bitrate}
-                    </span>
-
-                    <span className="text-xs font-mono text-zinc-400">
-                      {formatTime(song.duration)}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
       </main>
 
       {/* BOTTOM MASTER AUDIOPHILE PLAYER BAR */}
@@ -419,7 +506,7 @@ export function App() {
           onMouseEnter={handleVolumeMouseEnter}
           onMouseLeave={handleVolumeMouseLeave}
         >
-          {/* Floating CometDial HUD Overlay (Fades and springs in on hover) */}
+          {/* Floating CometDial HUD Overlay */}
           <div
             className={`absolute bottom-full right-0 mb-4 p-5 rounded-3xl bg-[#0b0e14]/95 border border-white/15 backdrop-blur-2xl shadow-[0_20px_50px_rgba(0,0,0,0.85)] flex flex-col items-center transition-all duration-300 z-50 pointer-events-auto ${
               isVolumeHovered

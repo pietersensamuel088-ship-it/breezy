@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { FEATURED_ALBUMS, ALL_SONGS } from './mockData';
 import { Album, Song } from './types';
 import { CircularCarousel, CarouselItem } from './components/CircularCarousel';
@@ -11,6 +11,9 @@ import { WelcomeOverlay } from './components/WelcomeOverlay';
 import { SongDetailModal } from './components/SongDetailModal';
 import { UserHubModal } from './components/UserHubModal';
 import { UpdateNotificationBanner } from './components/UpdateNotificationBanner';
+import { QueuePopover } from './components/QueuePopover';
+import { LightningEffect } from './components/LightningEffect';
+import { useHoldToQueue } from './utils/useHoldToQueue';
 import { checkForGitHubUpdate, GitHubCommitInfo } from './utils/githubUpdater';
 import { audioSynth } from './utils/audioSynthesizer';
 import { fuzzySearchSongs, searchCloudMusic } from './utils/songSearchEngine';
@@ -37,7 +40,8 @@ import {
   GitBranch,
   Globe,
   Loader2,
-  Radio
+  Radio,
+  ListMusic
 } from 'lucide-react';
 
 export function App() {
@@ -178,6 +182,62 @@ export function App() {
     }
   }, [currentSong.id, currentSong.audioUrl, isPlaying]);
 
+  // Interactive Spotify-Tier Play Queue State
+  const [queue, setQueue] = useState<Song[]>([]);
+  const [isQueueOpen, setIsQueueOpen] = useState<boolean>(false);
+  const [lightningActive, setLightningActive] = useState<boolean>(false);
+  const [lightningTrack, setLightningTrack] = useState<string>('');
+
+  // Prefetch a track to Proxmox/server disk immediately in the background
+  const prefetchSong = useCallback((song: Song) => {
+    try {
+      fetch(song.audioUrl, {
+        method: 'GET',
+        headers: { Range: 'bytes=0-1024' },
+      }).catch(() => {});
+    } catch {
+      // silent
+    }
+  }, []);
+
+  const addToQueue = useCallback((song: Song) => {
+    setQueue((prev) => [...prev, song]);
+    setLightningTrack(song.title);
+    setLightningActive(true);
+    // Automatically trigger Proxmox/server headless background download!
+    prefetchSong(song);
+  }, [prefetchSong]);
+
+  const removeFromQueue = useCallback((index: number) => {
+    setQueue((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const moveQueueUp = useCallback((index: number) => {
+    if (index <= 0) return;
+    setQueue((prev) => {
+      const copy = [...prev];
+      const temp = copy[index];
+      copy[index] = copy[index - 1];
+      copy[index - 1] = temp;
+      return copy;
+    });
+  }, []);
+
+  const moveQueueDown = useCallback((index: number) => {
+    setQueue((prev) => {
+      if (index >= prev.length - 1) return prev;
+      const copy = [...prev];
+      const temp = copy[index];
+      copy[index] = copy[index + 1];
+      copy[index + 1] = temp;
+      return copy;
+    });
+  }, []);
+
+  const clearQueue = useCallback(() => {
+    setQueue([]);
+  }, []);
+
   const togglePlay = () => {
     setIsPlaying((prev) => !prev);
   };
@@ -211,11 +271,38 @@ export function App() {
     }
   };
 
+  // Hold-to-Queue hook for all interactive track lists
+  const { holdingSongId, holdProgress, bindHold } = useHoldToQueue({
+    onQueue: addToQueue,
+    onClick: (song) => playSong(song),
+    holdDurationMs: 3000,
+  });
+
   const handleNext = () => {
+    if (queue.length > 0) {
+      const nextSong = queue[0];
+      setQueue((prev) => prev.slice(1));
+      playSong(nextSong);
+      return;
+    }
     const currentIndex = selectedAlbum.songs.findIndex(s => s.id === currentSong.id);
     const nextSong = selectedAlbum.songs[(currentIndex + 1) % selectedAlbum.songs.length];
     playSong(nextSong);
   };
+
+  // Spotify-Tier Predictive Lookahead Engine: Automatically pre-downloads upcoming track
+  useEffect(() => {
+    if (!isPlaying || duration === 0) return;
+    const timeLeft = duration - currentTime;
+    if (timeLeft <= 25 || currentTime < 4) {
+      const upcoming = queue.length > 0
+        ? queue[0]
+        : selectedAlbum.songs[(selectedAlbum.songs.findIndex((s) => s.id === currentSong.id) + 1) % selectedAlbum.songs.length];
+      if (upcoming && upcoming.id !== currentSong.id) {
+        prefetchSong(upcoming);
+      }
+    }
+  }, [currentTime, duration, isPlaying, queue, selectedAlbum.songs, currentSong.id, prefetchSong]);
 
   const handlePrev = () => {
     const currentIndex = selectedAlbum.songs.findIndex(s => s.id === currentSong.id);
@@ -635,17 +722,31 @@ export function App() {
 
               {(filteredSongs || selectedAlbum.songs).map((song, index) => {
                 const isCurrent = currentSong.id === song.id;
+                const isHolding = holdingSongId === song.id;
                 return (
                   <div
                     key={song.id}
-                    onClick={() => playSong(song)}
+                    {...bindHold(song)}
                     style={{ animationDelay: `${index * 45}ms` }}
-                    className={`group relative flex items-center justify-between px-5 py-4 rounded-2xl cursor-pointer transition-all duration-300 animate-slide-up ${
+                    className={`group relative flex items-center justify-between px-5 py-4 rounded-2xl cursor-pointer transition-all duration-300 animate-slide-up select-none ${
                       isCurrent
                         ? 'bg-white/10 border border-white/20 shadow-[0_10px_30px_rgba(0,0,0,0.6)] backdrop-blur-md'
                         : 'hover:bg-white/5 border border-transparent hover:border-white/5'
                     }`}
                   >
+                    {/* Hold-to-Queue Progress Glow Overlay */}
+                    {isHolding && (
+                      <div className="absolute inset-0 rounded-2xl overflow-hidden pointer-events-none z-20">
+                        <div
+                          className="h-full bg-cyan-400/15 border-b-2 border-cyan-400 shadow-[0_0_20px_rgba(56,189,248,0.6)] transition-all ease-linear"
+                          style={{ width: `${Math.round(holdProgress * 100)}%` }}
+                        />
+                        <div className="absolute top-2 right-4 text-[10px] font-mono text-cyan-300 font-bold tracking-wider flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
+                          <span>HOLD TO QUEUE ({Math.max(1, 3 - Math.floor(holdProgress * 3))}s)</span>
+                        </div>
+                      </div>
+                    )}
                     <div className="flex items-center gap-4">
                       <span className="w-5 text-center text-xs font-mono text-zinc-500 group-hover:text-white transition-colors">
                         {isCurrent && isPlaying ? (
@@ -714,17 +815,31 @@ export function App() {
 
                   {cloudSearchResults.map((song, index) => {
                     const isCurrent = currentSong.id === song.id;
+                    const isHolding = holdingSongId === song.id;
                     return (
                       <div
                         key={song.id}
-                        onClick={() => playSong(song)}
+                        {...bindHold(song)}
                         style={{ animationDelay: `${index * 40}ms` }}
-                        className={`group relative flex items-center justify-between px-5 py-4 rounded-2xl cursor-pointer transition-all duration-300 animate-slide-up ${
+                        className={`group relative flex items-center justify-between px-5 py-4 rounded-2xl cursor-pointer transition-all duration-300 animate-slide-up select-none ${
                           isCurrent
                             ? 'bg-blue-500/15 border border-blue-500/30 shadow-[0_10px_30px_rgba(0,0,0,0.6)] backdrop-blur-md'
                             : 'hover:bg-white/5 border border-transparent hover:border-white/5'
                         }`}
                       >
+                        {/* Hold-to-Queue Progress Glow Overlay */}
+                        {isHolding && (
+                          <div className="absolute inset-0 rounded-2xl overflow-hidden pointer-events-none z-20">
+                            <div
+                              className="h-full bg-cyan-400/15 border-b-2 border-cyan-400 shadow-[0_0_20px_rgba(56,189,248,0.6)] transition-all ease-linear"
+                              style={{ width: `${Math.round(holdProgress * 100)}%` }}
+                            />
+                            <div className="absolute top-2 right-4 text-[10px] font-mono text-cyan-300 font-bold tracking-wider flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
+                              <span>HOLD TO QUEUE ({Math.max(1, 3 - Math.floor(holdProgress * 3))}s)</span>
+                            </div>
+                          </div>
+                        )}
                         <div className="flex items-center gap-4">
                           <span className="w-5 text-center text-xs font-mono text-zinc-500 group-hover:text-white transition-colors">
                             {isCurrent && isBuffering ? (
@@ -971,7 +1086,27 @@ export function App() {
               onChange={handleSeek}
               className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-white"
             />
-            <span>{formatTime(duration)}</span>
+            <div className="flex items-center gap-2 shrink-0">
+              <span>{formatTime(duration)}</span>
+
+              {/* Special Spotify Queue Button right next to end audio seconds! */}
+              <button
+                onClick={() => setIsQueueOpen((prev) => !prev)}
+                className={`relative p-1.5 rounded-lg transition-all cursor-pointer ${
+                  isQueueOpen || queue.length > 0
+                    ? 'text-cyan-400 bg-cyan-500/20 border border-cyan-500/40 shadow-[0_0_15px_rgba(56,189,248,0.35)]'
+                    : 'text-zinc-400 hover:text-white hover:bg-white/10'
+                }`}
+                title="Next in Queue"
+              >
+                <ListMusic className="w-4 h-4" />
+                {queue.length > 0 && (
+                  <span className="absolute -top-1 -right-1.5 px-1 py-0.2 min-w-3.5 text-[9px] font-bold font-mono bg-cyan-400 text-black rounded-full flex items-center justify-center shadow-lg">
+                    {queue.length}
+                  </span>
+                )}
+              </button>
+            </div>
           </div>
 
           {/* Visualizer: Gently rises up when playing, and gently sinks down when paused */}
@@ -1099,6 +1234,29 @@ export function App() {
           setCurrentUser(name);
           setIsWelcomeOpen(false);
         }}
+      />
+
+      {/* SPOTIFY-TIER PLAY QUEUE POPOVER */}
+      <QueuePopover
+        isOpen={isQueueOpen}
+        onClose={() => setIsQueueOpen(false)}
+        currentSong={currentSong}
+        queue={queue}
+        onPlaySong={(song) => {
+          setQueue((prev) => prev.filter((s) => s.id !== song.id));
+          playSong(song);
+        }}
+        onRemoveFromQueue={removeFromQueue}
+        onMoveUp={moveQueueUp}
+        onMoveDown={moveQueueDown}
+        onClearQueue={clearQueue}
+      />
+
+      {/* LIGHTNING BOLT ANIMATION & TOAST */}
+      <LightningEffect
+        active={lightningActive}
+        trackTitle={lightningTrack}
+        onComplete={() => setLightningActive(false)}
       />
 
       {/* REAL HIGH-FIDELITY HTML5 AUDIO ENGINE */}

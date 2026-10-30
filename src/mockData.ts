@@ -6,7 +6,7 @@ export const FEATURED_ALBUMS: Album[] = [
     title: 'BREEZY (Deluxe)',
     artist: 'Chris Brown',
     year: 2022,
-    coverUrl: 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&w=1000&auto=format&fit=crop', // high-res vibrant visual
+    coverUrl: 'https://cdn-images.dzcdn.net/images/cover/2487714abac4e2c7be5e70e9b06ced1f/1000x1000-000000-80-0-0.jpg',
     accentColor: '#3b82f6', // electric cobalt blue
     tracksCount: 33,
     description: 'Tenth studio masterpiece showcasing high-tempo R&B, signature vocals, and deep basslines.',
@@ -16,9 +16,9 @@ export const FEATURED_ALBUMS: Album[] = [
         title: 'Under the Influence',
         artist: 'Chris Brown',
         album: 'BREEZY (Deluxe)',
-        coverUrl: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=1000&auto=format&fit=crop',
+        coverUrl: 'https://cdn-images.dzcdn.net/images/cover/2487714abac4e2c7be5e70e9b06ced1f/1000x1000-000000-80-0-0.jpg',
         duration: 184,
-        audioUrl: 'https://actions.google.com/sounds/v1/ambiences/rain_heavy.ogg', // Fallback stream or synthesized
+        audioUrl: './music/under-the-influence.mp3',
         bitrate: 'FLAC 24-bit / 96.0 kHz',
         format: 'FLAC',
         year: 2022,
@@ -37,9 +37,9 @@ export const FEATURED_ALBUMS: Album[] = [
         title: 'Call Me Every Day (feat. Wizkid)',
         artist: 'Chris Brown',
         album: 'BREEZY (Deluxe)',
-        coverUrl: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1000&auto=format&fit=crop',
-        duration: 216,
-        audioUrl: 'https://actions.google.com/sounds/v1/cartoon/metal_twang.ogg',
+        coverUrl: 'https://cdn-images.dzcdn.net/images/cover/cc269116fe4da8b1054a18ef7f1e39a8/1000x1000-000000-80-0-0.jpg',
+        duration: 146,
+        audioUrl: './music/call-me-every-day.mp3',
         bitrate: 'FLAC 24-bit / 96.0 kHz',
         format: 'FLAC',
         year: 2022,
@@ -56,9 +56,9 @@ export const FEATURED_ALBUMS: Album[] = [
         title: 'Psychic (feat. Jack Harlow)',
         artist: 'Chris Brown',
         album: 'BREEZY (Deluxe)',
-        coverUrl: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1000&auto=format&fit=crop',
+        coverUrl: 'https://cdn-images.dzcdn.net/images/cover/617ae48566e129cdac2b150c4f208c5f/1000x1000-000000-80-0-0.jpg',
         duration: 220,
-        audioUrl: 'https://actions.google.com/sounds/v1/science_fiction/teleport_in.ogg',
+        audioUrl: './music/psychic.mp3',
         bitrate: 'FLAC 24-bit / 48.0 kHz',
         format: 'FLAC',
         year: 2022,
@@ -76,7 +76,7 @@ export const FEATURED_ALBUMS: Album[] = [
     title: 'Certified Lover Boy',
     artist: 'Drake',
     year: 2021,
-    coverUrl: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?q=80&w=1000&auto=format&fit=crop',
+    coverUrl: 'https://cdn-images.dzcdn.net/images/cover/ea8f80f2edb20885ac8aed8751716794/1000x1000-000000-80-0-0.jpg',
     accentColor: '#f43f5e', // rose crimson
     tracksCount: 21,
     description: 'Iconic 6 God compilation featuring legendary collaborations, melodic introspections and 808 anthems.',
@@ -86,9 +86,9 @@ export const FEATURED_ALBUMS: Album[] = [
         title: 'Knife Talk (feat. 21 Savage)',
         artist: 'Drake',
         album: 'Certified Lover Boy',
-        coverUrl: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?q=80&w=1000&auto=format&fit=crop',
-        duration: 242,
-        audioUrl: 'https://actions.google.com/sounds/v1/weapons/laser_gun.ogg',
+        coverUrl: 'https://cdn-images.dzcdn.net/images/cover/ea8f80f2edb20885ac8aed8751716794/1000x1000-000000-80-0-0.jpg',
+        duration: 243,
+        audioUrl: './music/knife-talk.mp3',
         bitrate: 'FLAC 24-bit / 96.0 kHz',
         format: 'FLAC',
         year: 2021,
@@ -105,9 +105,9 @@ export const FEATURED_ALBUMS: Album[] = [
         title: 'Way 2 Sexy (feat. Future & Young Thug)',
         artist: 'Drake',
         album: 'Certified Lover Boy',
-        coverUrl: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=1000&auto=format&fit=crop',
+        coverUrl: 'https://cdn-images.dzcdn.net/images/cover/ea8f80f2edb20885ac8aed8751716794/1000x1000-000000-80-0-0.jpg',
         duration: 257,
-        audioUrl: 'https://actions.google.com/sounds/v1/foley/water_drip.ogg',
+        audioUrl: './music/way-2-sexy.mp3',
         bitrate: '320 kbps MP3',
         format: 'MP3',
         year: 2021,
@@ -117,6 +117,24 @@ export const FEATURED_ALBUMS: Album[] = [
           { time: 7, text: "I'm too sexy for this syrup, too sexy for your girl" },
           { time: 14, text: "Too sexy for this world, too sexy for this club" }
         ]
+      },
+      {
+        id: 'drk-2b',
+        title: 'Fair Trade (feat. Travis Scott)',
+        artist: 'Drake',
+        album: 'Certified Lover Boy',
+        coverUrl: 'https://cdn-images.dzcdn.net/images/cover/ea8f80f2edb20885ac8aed8751716794/1000x1000-000000-80-0-0.jpg',
+        duration: 291,
+        audioUrl: './music/fair-trade.mp3',
+        bitrate: 'FLAC 24-bit / 96.0 kHz',
+        format: 'FLAC',
+        year: 2021,
+        genre: 'Hip-Hop',
+        accentColor: '#f43f5e',
+        lyrics: [
+          { time: 6, text: "I've been losin' friends and findin' peace" },
+          { time: 12, text: "Honestly that sound like a fair trade to me" }
+        ]
       }
     ]
   },
@@ -125,7 +143,7 @@ export const FEATURED_ALBUMS: Album[] = [
     title: 'Indigo',
     artist: 'Chris Brown',
     year: 2019,
-    coverUrl: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=1000&auto=format&fit=crop',
+    coverUrl: 'https://cdn-images.dzcdn.net/images/cover/a98490c02eb8ac45ceb373543b50ec0e/1000x1000-000000-80-0-0.jpg',
     accentColor: '#8b5cf6', // deep purple violet
     tracksCount: 32,
     description: 'Cosmic double-album exploring spirituality, dualities, and electric dance rhythms.',
@@ -135,9 +153,9 @@ export const FEATURED_ALBUMS: Album[] = [
         title: 'No Guidance (feat. Drake)',
         artist: 'Chris Brown',
         album: 'Indigo',
-        coverUrl: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=1000&auto=format&fit=crop',
+        coverUrl: 'https://cdn-images.dzcdn.net/images/cover/a98490c02eb8ac45ceb373543b50ec0e/1000x1000-000000-80-0-0.jpg',
         duration: 260,
-        audioUrl: 'https://actions.google.com/sounds/v1/household/clock_ticking.ogg',
+        audioUrl: './music/no-guidance.mp3',
         bitrate: 'FLAC 24-bit / 96.0 kHz',
         format: 'FLAC',
         year: 2019,
@@ -148,6 +166,24 @@ export const FEATURED_ALBUMS: Album[] = [
           { time: 12, text: "Hopefully we don't bust up no guidance" },
           { time: 18, text: "You got that fire, and I got that flame" }
         ]
+      },
+      {
+        id: 'cb-4b',
+        title: 'Heat (feat. Gunna)',
+        artist: 'Chris Brown',
+        album: 'Indigo',
+        coverUrl: 'https://cdn-images.dzcdn.net/images/cover/a98490c02eb8ac45ceb373543b50ec0e/1000x1000-000000-80-0-0.jpg',
+        duration: 232,
+        audioUrl: './music/heat.mp3',
+        bitrate: 'FLAC 24-bit / 96.0 kHz',
+        format: 'FLAC',
+        year: 2019,
+        genre: 'R&B / Trap',
+        accentColor: '#8b5cf6',
+        lyrics: [
+          { time: 5, text: "Got that fire, got that heat" },
+          { time: 11, text: "Baby know what she doing when we meet" }
+        ]
       }
     ]
   },
@@ -156,7 +192,7 @@ export const FEATURED_ALBUMS: Album[] = [
     title: 'Her Loss',
     artist: 'Drake & 21 Savage',
     year: 2022,
-    coverUrl: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?q=80&w=1000&auto=format&fit=crop',
+    coverUrl: 'https://cdn-images.dzcdn.net/images/cover/4599d79a2bea5890737328996e2e7077/1000x1000-000000-80-0-0.jpg',
     accentColor: '#06b6d4', // neon cyan
     tracksCount: 16,
     description: 'Relentless hard-hitting collaborative album produced with Tay Keith and Boi-1da.',
@@ -166,9 +202,9 @@ export const FEATURED_ALBUMS: Album[] = [
         title: 'Rich Flex',
         artist: 'Drake & 21 Savage',
         album: 'Her Loss',
-        coverUrl: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?q=80&w=1000&auto=format&fit=crop',
+        coverUrl: 'https://cdn-images.dzcdn.net/images/cover/4599d79a2bea5890737328996e2e7077/1000x1000-000000-80-0-0.jpg',
         duration: 239,
-        audioUrl: 'https://actions.google.com/sounds/v1/human/crowd_cheer.ogg',
+        audioUrl: './music/rich-flex.mp3',
         bitrate: 'FLAC 24-bit / 192.0 kHz',
         format: 'FLAC',
         year: 2022,
@@ -179,6 +215,24 @@ export const FEATURED_ALBUMS: Album[] = [
           { time: 9, text: "Can you hit a lil' rich flex for me?" },
           { time: 15, text: "And 21, can you do your thing for me?" }
         ]
+      },
+      {
+        id: 'drk-3b',
+        title: 'Spin Bout U',
+        artist: 'Drake & 21 Savage',
+        album: 'Her Loss',
+        coverUrl: 'https://cdn-images.dzcdn.net/images/cover/4599d79a2bea5890737328996e2e7077/1000x1000-000000-80-0-0.jpg',
+        duration: 214,
+        audioUrl: './music/spin-bout-u.mp3',
+        bitrate: 'FLAC 24-bit / 96.0 kHz',
+        format: 'FLAC',
+        year: 2022,
+        genre: 'Hip-Hop / R&B',
+        accentColor: '#06b6d4',
+        lyrics: [
+          { time: 6, text: "I'll spin about you, girl you know it's true" },
+          { time: 13, text: "Ain't nothing in this world I wouldn't do" }
+        ]
       }
     ]
   },
@@ -187,7 +241,7 @@ export const FEATURED_ALBUMS: Album[] = [
     title: '11:11',
     artist: 'Chris Brown',
     year: 2023,
-    coverUrl: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=1000&auto=format&fit=crop',
+    coverUrl: 'https://cdn-images.dzcdn.net/images/cover/e8b1b523f139f23bac60bc70528f386a/1000x1000-000000-80-0-0.jpg',
     accentColor: '#10b981', // emerald green
     tracksCount: 22,
     description: 'Elevated, mature sonic project balanced across 11:11 AM and 11:11 PM conceptual discs.',
@@ -197,9 +251,9 @@ export const FEATURED_ALBUMS: Album[] = [
         title: 'Sensational (feat. Davido & Lojay)',
         artist: 'Chris Brown',
         album: '11:11',
-        coverUrl: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=1000&auto=format&fit=crop',
+        coverUrl: 'https://cdn-images.dzcdn.net/images/cover/e8b1b523f139f23bac60bc70528f386a/1000x1000-000000-80-0-0.jpg',
         duration: 231,
-        audioUrl: 'https://actions.google.com/sounds/v1/science_fiction/force_field.ogg',
+        audioUrl: './music/sensational.mp3',
         bitrate: 'FLAC 24-bit / 96.0 kHz',
         format: 'FLAC',
         year: 2023,

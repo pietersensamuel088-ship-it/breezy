@@ -130,20 +130,21 @@ export function App() {
     });
   };
 
-  // Track timer loop
+  // Track timer & auto-advance fallback if audio element is loading
   useEffect(() => {
     let interval: number;
     if (isPlaying) {
       interval = window.setInterval(() => {
-        setCurrentTime((prev) => {
-          if (prev >= duration) {
-            // When song finishes, commit it to #1 in history
-            commitSongToHistory(currentSong);
-            handleNext();
-            return 0;
-          }
-          return prev + 1;
-        });
+        if (!audioRef.current || audioRef.current.paused) {
+          setCurrentTime((prev) => {
+            if (prev >= duration) {
+              commitSongToHistory(currentSong);
+              handleNext();
+              return 0;
+            }
+            return prev + 1;
+          });
+        }
       }, 1000);
     }
     return () => clearInterval(interval);
@@ -193,6 +194,7 @@ export function App() {
     audioSynth.startRhythm(song.genre);
     if (audioRef.current) {
       audioRef.current.src = song.audioUrl;
+      audioRef.current.currentTime = 0;
       audioRef.current.play().catch(() => {});
     }
   };
@@ -212,6 +214,9 @@ export function App() {
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const seekTime = parseFloat(e.target.value);
     setCurrentTime(seekTime);
+    if (audioRef.current) {
+      audioRef.current.currentTime = seekTime;
+    }
   };
 
   const formatTime = (secs: number) => {
@@ -861,7 +866,12 @@ export function App() {
         onPrev={handlePrev}
         currentTime={currentTime}
         duration={duration}
-        onSeek={(val) => setCurrentTime(val)}
+        onSeek={(val) => {
+          setCurrentTime(val);
+          if (audioRef.current) {
+            audioRef.current.currentTime = val;
+          }
+        }}
         volume={volume}
         onVolumeChange={(val) => {
           setVolume(val);
@@ -887,6 +897,27 @@ export function App() {
         onComplete={(name) => {
           setCurrentUser(name);
           setIsWelcomeOpen(false);
+        }}
+      />
+
+      {/* REAL HIGH-FIDELITY HTML5 AUDIO ENGINE */}
+      <audio
+        ref={audioRef}
+        src={currentSong.audioUrl}
+        preload="auto"
+        onEnded={() => {
+          commitSongToHistory(currentSong);
+          handleNext();
+        }}
+        onTimeUpdate={() => {
+          if (audioRef.current && isPlaying) {
+            setCurrentTime(audioRef.current.currentTime);
+          }
+        }}
+        onLoadedMetadata={() => {
+          if (audioRef.current && audioRef.current.duration) {
+            setDuration(audioRef.current.duration);
+          }
         }}
       />
     </div>

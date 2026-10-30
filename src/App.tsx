@@ -341,11 +341,22 @@ export function App() {
     holdDurationMs: 3000,
   });
 
+  // Upcoming Song Calculation (Prioritizes Queue, then Album Sequence, then Library)
+  const upcomingSong = useMemo(() => {
+    if (queue.length > 0) return queue[0];
+    const albumWithSong = albums.find((a) => a.songs.some((s) => s.id === currentSong.id)) || selectedAlbum;
+    if (!albumWithSong || albumWithSong.songs.length === 0) return null;
+    const curIdx = albumWithSong.songs.findIndex((s) => s.id === currentSong.id);
+    const nextIdx = (curIdx + 1) % albumWithSong.songs.length;
+    return albumWithSong.songs[nextIdx];
+  }, [queue, albums, selectedAlbum, currentSong.id]);
+
   const handleNext = () => {
-    if (queue.length > 0) {
-      const nextSong = queue[0];
-      setQueue((prev) => prev.slice(1));
-      playSong(nextSong);
+    if (upcomingSong) {
+      if (queue.length > 0) {
+        setQueue((prev) => prev.slice(1));
+      }
+      playSong(upcomingSong);
       return;
     }
     const currentIndex = selectedAlbum.songs.findIndex(s => s.id === currentSong.id);
@@ -353,16 +364,12 @@ export function App() {
     playSong(nextSong);
   };
 
-  // Spotify-Tier Predictive Lookahead Engine: Prefetches next song ONCE when current song starts
+  // Spotify-Tier Predictive Lookahead Engine: Prefetches next upcoming song into browser cache & local proxy
   useEffect(() => {
-    if (!isPlaying) return;
-    const upcoming = queue.length > 0
-      ? queue[0]
-      : selectedAlbum.songs[(selectedAlbum.songs.findIndex((s) => s.id === currentSong.id) + 1) % selectedAlbum.songs.length];
-    if (upcoming && upcoming.id !== currentSong.id) {
-      prefetchSong(upcoming);
+    if (upcomingSong && upcomingSong.id !== currentSong.id) {
+      prefetchSong(upcomingSong);
     }
-  }, [currentSong.id, queue, isPlaying, selectedAlbum.songs, prefetchSong]);
+  }, [upcomingSong, currentSong.id, prefetchSong]);
 
   const handlePrev = () => {
     // Spotify Rule 1: If audio has played for more than 3 seconds, rewind current track to 0:00
@@ -736,25 +743,27 @@ export function App() {
                 }}
               />
 
-              {/* Majestic CircularCarousel Wrapping Across the Stage */}
-              <div className="w-full h-[640px] max-h-[80vh] flex items-center justify-center">
+              {/* Majestic CircularCarousel Wrapping Across the Stage - Bigger & High Performance */}
+              <div className="w-full h-[700px] max-h-[85vh] flex items-center justify-center">
                 <CircularCarousel
                   items={carouselItems}
                   preset="cylinder"
                   intro="assemble"
-                  cardWidth={320}
+                  cardWidth={390}
                   aspectRatio={1}
                   speed={8}
                   captions={true}
-                  gap={60}
+                  gap={75}
+                  curve={0}
+                  backfaces={false}
                   tilt={-3.5}
-                  perspective={2350}
-                  momentum={0.65}
+                  perspective={2600}
+                  momentum={0.7}
                   snap={true}
-                  parallax={0.35}
+                  parallax={0.25}
                   stretch={0.4}
                   fadeColor="#050608"
-                  cornerRadius={30}
+                  cornerRadius={32}
                   onChange={(index) => {
                     setSelectedAlbumIndex(index);
                   }}
@@ -1473,6 +1482,16 @@ export function App() {
         trackTitle={lightningTrack}
         onComplete={handleLightningComplete}
       />
+
+      {/* Hidden Zero-Latency Audio Preloader for Upcoming Song */}
+      {upcomingSong && (
+        <audio
+          key={`preload-${upcomingSong.id}`}
+          src={upcomingSong.audioUrl}
+          preload="auto"
+          className="hidden pointer-events-none"
+        />
+      )}
 
       {/* REAL HIGH-FIDELITY HTML5 AUDIO ENGINE */}
       <audio

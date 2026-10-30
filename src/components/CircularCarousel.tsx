@@ -142,6 +142,7 @@ export interface CircularCarouselProps {
   innerShade?: number;
   cornerRadius?: number;
   captions?: boolean;
+  backfaces?: boolean;
   onChange?: (index: number) => void;
   onItemClick?: (item: CarouselItem, index: number) => void;
   className?: string;
@@ -174,6 +175,7 @@ export const CircularCarousel: React.FC<CircularCarouselProps> = ({
   innerShade = 0.6,
   cornerRadius = 20,
   captions = false,
+  backfaces,
   onChange,
   onItemClick,
   className = '',
@@ -841,6 +843,7 @@ export const CircularCarousel: React.FC<CircularCarouselProps> = ({
             src={item.src}
             alt=""
             draggable={false}
+            loading={Math.abs(index - active) <= 6 ? 'eager' : 'lazy'}
             decoding="async"
             style={photoStyle}
           />
@@ -907,7 +910,7 @@ export const CircularCarousel: React.FC<CircularCarouselProps> = ({
                   aria-label={`${item.title || item.alt || `Image ${index + 1}`}, ${index + 1} of ${count}`}
                 >
                   {tiles.map(tile => renderTile(item, tile, false, index))}
-                  {layout.backfaces && tiles.map(tile => renderTile(item, tile, true, index))}
+                  {(backfaces ?? layout.backfaces) && tiles.map(tile => renderTile(item, tile, true, index))}
                 </div>
               ))}
             </div>

@@ -13,6 +13,7 @@ import { UserHubModal } from './components/UserHubModal';
 import { UpdateNotificationBanner } from './components/UpdateNotificationBanner';
 import { QueuePopover } from './components/QueuePopover';
 import { LightningEffect } from './components/LightningEffect';
+import { LikedSongsView, LikedSongItem } from './components/LikedSongsView';
 import { useHoldToQueue } from './utils/useHoldToQueue';
 import { checkForGitHubUpdate, GitHubCommitInfo } from './utils/githubUpdater';
 import { audioSynth } from './utils/audioSynthesizer';
@@ -41,7 +42,8 @@ import {
   Globe,
   Loader2,
   Radio,
-  ListMusic
+  ListMusic,
+  Heart
 } from 'lucide-react';
 
 export function App() {
@@ -106,8 +108,50 @@ export function App() {
   const dragStartRef = useRef<{ mouseX: number; mouseY: number; startX: number; startY: number } | null>(null);
   const volumeLeaveTimeout = useRef<number | null>(null);
 
-  // View state: 'home' (Pure Fullscreen Carousel) vs 'album' (Split detail track view)
-  const [viewMode, setViewMode] = useState<'home' | 'album'>('home');
+  // View state: 'home' (Pure Fullscreen Carousel) vs 'album' (Split detail track view) vs 'liked' (Spotify Liked Songs List)
+  const [viewMode, setViewMode] = useState<'home' | 'album' | 'liked'>('home');
+
+  // Spotify-style Play History Stack for true historical rewind
+  const [playHistoryStack, setPlayHistoryStack] = useState<Song[]>([]);
+
+  // Spotify Liked Songs collection with persistent LocalStorage
+  const [likedSongs, setLikedSongs] = useState<LikedSongItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('breezy_liked_songs');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error('Failed to parse breezy_liked_songs', e);
+    }
+    // High-energy starter favorites so list is never blank out of the box
+    return [
+      { ...FEATURED_ALBUMS[0].songs[0], likedAt: new Date(Date.now() - 3600000 * 3).toISOString() }, // Under the Influence
+      { ...FEATURED_ALBUMS[0].songs[1], likedAt: new Date(Date.now() - 86400000 * 1).toISOString() }, // Call Me Every Day
+      { ...FEATURED_ALBUMS[2].songs[0], likedAt: new Date(Date.now() - 86400000 * 4).toISOString() }, // No Guidance
+      { ...FEATURED_ALBUMS[3].songs[0], likedAt: new Date(Date.now() - 86400000 * 7).toISOString() }, // Rich Flex
+    ];
+  });
+
+  const isSongLiked = useCallback((songId: string) => {
+    return likedSongs.some((s) => s.id === songId);
+  }, [likedSongs]);
+
+  const toggleLikeSong = useCallback((song: Song) => {
+    setLikedSongs((prev) => {
+      const exists = prev.some((s) => s.id === song.id);
+      let updated: LikedSongItem[];
+      if (exists) {
+        updated = prev.filter((s) => s.id !== song.id);
+      } else {
+        updated = [{ ...song, likedAt: new Date().toISOString() }, ...prev];
+      }
+      try {
+        localStorage.setItem('breezy_liked_songs', JSON.stringify(updated));
+      } catch (e) {
+        console.error('Failed to save breezy_liked_songs', e);
+      }
+      return updated;
+    });
+  }, []);
 
   // Modals
   const [isDownloaderOpen, setIsDownloaderOpen] = useState<boolean>(false);
@@ -252,7 +296,15 @@ export function App() {
     setIsPlaying((prev) => !prev);
   };
 
-  const playSong = (song: Song, shouldNavigateToAlbum = false) => {
+  const playSong = (song: Song, shouldNavigateToAlbum = false, fromHistory = false) => {
+    // Spotify history stack: push current song if navigating to a new track and not from rewind
+    if (!fromHistory && currentSong && currentSong.id !== song.id) {
+      setPlayHistoryStack((prev) => {
+        if (prev.length > 0 && prev[prev.length - 1].id === currentSong.id) return prev;
+        return [...prev, currentSong];
+      });
+    }
+
     // If we've listened to the previous song for more than 10 seconds, move previous to #1
     if (currentTime > 10 && currentSong.id !== song.id) {
       commitSongToHistory(currentSong);
@@ -312,9 +364,28 @@ export function App() {
   }, [currentSong.id, queue, isPlaying, selectedAlbum.songs, prefetchSong]);
 
   const handlePrev = () => {
+    // Spotify Rule 1: If audio has played for more than 3 seconds, rewind current track to 0:00
+    const currentAudioTime = audioRef.current?.currentTime ?? currentTime;
+    if (currentAudioTime > 3) {
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+      }
+      setCurrentTime(0);
+      return;
+    }
+
+    // Spotify Rule 2: If <= 3 seconds, play the most recent track from session play history
+    if (playHistoryStack.length > 0) {
+      const prevSong = playHistoryStack[playHistoryStack.length - 1];
+      setPlayHistoryStack((prev) => prev.slice(0, -1));
+      playSong(prevSong, false, true);
+      return;
+    }
+
+    // Spotify Fallback: If no history exists, go to previous track in album or restart
     const currentIndex = selectedAlbum.songs.findIndex(s => s.id === currentSong.id);
     const prevIndex = (currentIndex - 1 + selectedAlbum.songs.length) % selectedAlbum.songs.length;
-    playSong(selectedAlbum.songs[prevIndex]);
+    playSong(selectedAlbum.songs[prevIndex], false, true);
   };
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -546,7 +617,33 @@ export function App() {
             </button>
           )}
 
-          {(viewMode === 'album' || searchQuery.trim() !== '') && (
+          {/* Spotify Liked Songs Library Quick-Track Pill */}
+          <button
+            onClick={() => {
+              setViewMode((prev) => (prev === 'liked' ? 'home' : 'liked'));
+              setSearchQuery('');
+            }}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl border text-xs font-mono transition-all hover:scale-105 active:scale-95 cursor-pointer ${
+              viewMode === 'liked'
+                ? 'bg-gradient-to-r from-purple-600/30 to-indigo-600/30 border-purple-500/50 text-white shadow-[0_0_15px_rgba(147,51,234,0.35)]'
+                : 'bg-white/[0.04] hover:bg-white/[0.08] border-white/10 text-zinc-300 hover:text-white'
+            }`}
+            title="Open Spotify Liked Songs Library"
+          >
+            <Heart
+              className={`w-3.5 h-3.5 transition-colors ${
+                viewMode === 'liked'
+                  ? 'fill-purple-400 text-purple-400'
+                  : 'text-purple-400 group-hover:text-purple-300'
+              }`}
+            />
+            <span className="font-semibold">LIKED</span>
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/10 text-zinc-300 font-mono font-bold">
+              {likedSongs.length}
+            </span>
+          </button>
+
+          {(viewMode === 'album' || viewMode === 'liked' || searchQuery.trim() !== '') && (
             <button
               onClick={() => {
                 setViewMode('home');
@@ -661,8 +758,25 @@ export function App() {
           </div>
         )}
 
+        {/* VIEW 3: SPOTIFY LIKED SONGS VIEW WITH SMOOTH ZOOM-IN ANIMATION */}
+        {viewMode === 'liked' && !filteredSongs && (
+          <LikedSongsView
+            likedSongs={likedSongs}
+            currentSong={currentSong}
+            isPlaying={isPlaying}
+            currentUser={currentUser}
+            onPlaySong={(song) => playSong(song)}
+            onTogglePlay={togglePlay}
+            onToggleLike={toggleLikeSong}
+            onBack={() => setViewMode('home')}
+            bindHold={bindHold}
+            holdingSongId={holdingSongId}
+            holdProgress={holdProgress}
+          />
+        )}
+
         {/* VIEW 2: ALBUM DETAIL VIEW (SLIDES TO SIDE & DISPLAYS TRACKS SMOOTHLY) */}
-        {(viewMode === 'album' || filteredSongs) && (
+        {(viewMode === 'album' || (filteredSongs && viewMode !== 'liked')) && (
           <div className="relative w-full h-full max-w-6xl mx-auto px-8 flex flex-col md:flex-row items-center justify-between gap-10 overflow-y-auto pt-4 pb-12 animate-album-glide">
             {/* Left: Showcase Pedestal of Active Album with bottom-up fade */}
             <div className="w-full md:w-80 shrink-0 flex flex-col items-center md:items-start space-y-5 text-center md:text-left animate-slide-up">
@@ -813,7 +927,23 @@ export function App() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-5">
+                    <div className="flex items-center gap-4">
+                      {/* Heart Quick-Like Toggle */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleLikeSong(song);
+                        }}
+                        className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                          isSongLiked(song.id)
+                            ? 'text-purple-400 hover:scale-110 active:scale-90'
+                            : 'text-zinc-600 hover:text-white hover:scale-110 active:scale-90 opacity-0 group-hover:opacity-100'
+                        }`}
+                        title={isSongLiked(song.id) ? 'Remove from Liked Songs' : 'Save to Liked Songs'}
+                      >
+                        <Heart className={`w-4 h-4 ${isSongLiked(song.id) ? 'fill-purple-400' : ''}`} />
+                      </button>
+
                       <span className="hidden sm:inline-block px-2.5 py-0.5 rounded-md text-[10px] font-mono tracking-wider bg-white/5 text-zinc-400 border border-white/5">
                         {song.bitrate}
                       </span>
@@ -910,7 +1040,23 @@ export function App() {
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-3">
+                          {/* Heart Quick-Like Toggle */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleLikeSong(song);
+                            }}
+                            className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                              isSongLiked(song.id)
+                                ? 'text-purple-400 hover:scale-110 active:scale-90'
+                                : 'text-zinc-600 hover:text-white hover:scale-110 active:scale-90 opacity-0 group-hover:opacity-100'
+                            }`}
+                            title={isSongLiked(song.id) ? 'Remove from Liked Songs' : 'Save to Liked Songs'}
+                          >
+                            <Heart className={`w-4 h-4 ${isSongLiked(song.id) ? 'fill-purple-400' : ''}`} />
+                          </button>
+
                           <span className="px-2.5 py-0.5 rounded-md text-[10px] font-mono tracking-wider bg-blue-500/10 text-blue-300 border border-blue-500/20">
                             Proxmox Stream
                           </span>
@@ -1043,7 +1189,7 @@ export function App() {
               <Maximize2 className="w-5 h-5 text-white drop-shadow-md" />
             </div>
           </div>
-          <div className="overflow-hidden">
+          <div className="overflow-hidden flex-1">
             <h4 className="text-sm font-bold text-white truncate tracking-wide group-hover:text-blue-300 transition-colors">
               {currentSong.title}
             </h4>
@@ -1067,6 +1213,28 @@ export function App() {
               )}
             </div>
           </div>
+
+          {/* Quick-Like Heart Button (Spotify style) */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleLikeSong(currentSong);
+            }}
+            className={`p-2 rounded-xl transition-all cursor-pointer shrink-0 ${
+              isSongLiked(currentSong.id)
+                ? 'text-purple-400 hover:scale-115 active:scale-90'
+                : 'text-zinc-500 hover:text-purple-400 hover:scale-115 active:scale-90'
+            }`}
+            title={isSongLiked(currentSong.id) ? 'Remove from Liked Songs' : 'Save to Liked Songs'}
+          >
+            <Heart
+              className={`w-4.5 h-4.5 transition-colors ${
+                isSongLiked(currentSong.id)
+                  ? 'fill-purple-400 text-purple-400 filter drop-shadow-[0_0_8px_rgba(168,85,247,0.5)]'
+                  : ''
+              }`}
+            />
+          </button>
         </div>
 
         {/* Center: Controls, Scrubber & Visualizer */}
@@ -1076,6 +1244,7 @@ export function App() {
             <button
               onClick={handlePrev}
               className="text-zinc-400 hover:text-white transition-transform hover:scale-110 active:scale-95"
+              title={currentTime > 3 ? "Restart song (0:00)" : "Play previous song from history"}
             >
               <SkipBack className="w-4 h-4" />
             </button>

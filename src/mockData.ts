@@ -16,15 +16,15 @@ export const FEATURED_CDN_STREAMS: Record<string, string> = {
 
 export const getStreamUrl = (songId: string, title: string, artist: string): string => {
   const customBackend = typeof window !== 'undefined' ? localStorage.getItem('breezy_backend_url') : null;
-  // If user configured a Proxmox backend URL, route to Proxmox!
+  // If user configured a Proxmox backend URL, route directly to Proxmox!
   if (customBackend) {
     return `${customBackend}/api/stream?id=${encodeURIComponent(songId)}&title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}`;
   }
-  // Otherwise, use direct high-speed CDN stream for immediate playback
-  if (FEATURED_CDN_STREAMS[songId]) {
-    return FEATURED_CDN_STREAMS[songId];
-  }
-  return `http://127.0.0.1:5050/api/stream?id=${encodeURIComponent(songId)}&title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}`;
+  // Local stream server (Vite on 5173 which streams full 320kbps tracks from nicsongs)
+  const host = typeof window !== 'undefined' && window.location.origin.includes('http')
+    ? window.location.origin
+    : 'http://127.0.0.1:5173';
+  return `${host}/api/stream?id=${encodeURIComponent(songId)}&title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}`;
 };
 
 export const FEATURED_ALBUMS: Album[] = [

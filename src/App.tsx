@@ -138,25 +138,7 @@ export function App() {
     });
   };
 
-  // Track timer & auto-advance fallback if audio element is loading
-  useEffect(() => {
-    let interval: number;
-    if (isPlaying) {
-      interval = window.setInterval(() => {
-        if (!audioRef.current || audioRef.current.paused) {
-          setCurrentTime((prev) => {
-            if (prev >= duration) {
-              commitSongToHistory(currentSong);
-              handleNext();
-              return 0;
-            }
-            return prev + 1;
-          });
-        }
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [isPlaying, duration, currentSong]);
+
 
   const togglePlay = () => {
     if (isPlaying) {

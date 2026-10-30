@@ -2,7 +2,53 @@ import { defineConfig, Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import fs from 'fs';
 import path from 'path';
-import { exec } from 'child_process';
+import { spawn } from 'child_process';
+
+const MAX_LRU_CACHE_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
+
+function touchLru(filePath: string) {
+  try {
+    if (fs.existsSync(filePath)) {
+      const now = new Date();
+      fs.utimesSync(filePath, now, now);
+    }
+  } catch {}
+}
+
+function cleanLruCache(songsDir: string, maxBytes = MAX_LRU_CACHE_BYTES) {
+  try {
+    if (!fs.existsSync(songsDir)) return;
+    const entries = fs.readdirSync(songsDir, { withFileTypes: true });
+    const files: { path: string; name: string; size: number; mtime: number }[] = [];
+
+    for (const entry of entries) {
+      if (entry.isFile()) {
+        const fullPath = path.join(songsDir, entry.name);
+        if (entry.name.endsWith('.tmp') || entry.name.endsWith('.part')) continue;
+        try {
+          const stat = fs.statSync(fullPath);
+          files.push({ path: fullPath, name: entry.name, size: stat.size, mtime: stat.mtimeMs });
+        } catch {}
+      }
+    }
+
+    let totalSize = files.reduce((acc, f) => acc + f.size, 0);
+    if (totalSize > maxBytes) {
+      console.log(`[LRU Cache] Storage ${Math.round(totalSize / 1024 / 1024)}MB exceeds limit. Pruning oldest songs...`);
+      files.sort((a, b) => a.mtime - b.mtime);
+      for (const f of files) {
+        if (totalSize <= maxBytes * 0.75) break;
+        try {
+          fs.unlinkSync(f.path);
+          totalSize -= f.size;
+          console.log(`[LRU Cache] Evicted: ${f.name}`);
+        } catch {}
+      }
+    }
+  } catch (err) {
+    console.warn('[LRU Cache Note]', err);
+  }
+}
 
 function findLocalSong(title: string, artist: string): string | null {
   const songsDir = path.resolve(__dirname, 'nicsongs');
@@ -48,6 +94,51 @@ function findLocalSong(title: string, artist: string): string | null {
   return scan(songsDir);
 }
 
+function serveLocalRange(filePath: string, req: any, res: any) {
+  const stat = fs.statSync(filePath);
+  const fileSize = stat.size;
+  const range = req.headers.range;
+
+  const contentType = filePath.endsWith('.flac')
+    ? 'audio/flac'
+    : filePath.endsWith('.m4a') || filePath.endsWith('.mp4')
+    ? 'audio/mp4'
+    : filePath.endsWith('.webm')
+    ? 'audio/webm'
+    : 'audio/mpeg';
+
+  res.setHeader('Accept-Ranges', 'bytes');
+  res.setHeader('Content-Type', contentType);
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type, Accept');
+
+  if (range) {
+    const parts = range.replace(/bytes=/, '').split('-');
+    const start = parseInt(parts[0], 10);
+    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+
+    if (start >= fileSize || end >= fileSize) {
+      res.statusCode = 416;
+      res.setHeader('Content-Range', `bytes */${fileSize}`);
+      res.end();
+      return;
+    }
+
+    const chunkSize = end - start + 1;
+    const stream = fs.createReadStream(filePath, { start, end });
+
+    res.statusCode = 206;
+    res.setHeader('Content-Range', `bytes ${start}-${end}/${fileSize}`);
+    res.setHeader('Content-Length', chunkSize);
+    stream.pipe(res);
+  } else {
+    res.statusCode = 200;
+    res.setHeader('Content-Length', fileSize);
+    fs.createReadStream(filePath).pipe(res);
+  }
+}
+
 const inFlightDownloads = new Map<string, Promise<string | null>>();
 
 function breezyAudioStreamerPlugin(): Plugin {
@@ -75,97 +166,96 @@ function breezyAudioStreamerPlugin(): Plugin {
 
         console.log(`[Breezy Stream] Request for: "${artist} - ${title}"`);
 
-        // 1. Check local nicsongs library
+        // 1. Check local LRU cache in nicsongs
         let filePath = findLocalSong(title, artist);
-
-        // 2. If not yet downloaded, check if already being fetched or start fast native download
-        if (!filePath || !fs.existsSync(filePath)) {
-          const cleanArtist = artist.replace(/["'$`\\]/g, '');
-          const cleanTitle = title.replace(/["'$`\\]/g, '');
-          const cleanName = `${artist}_${title}`.replace(/[^a-zA-Z0-9_\-\.]/g, '_').toLowerCase();
-          const targetMp3 = path.resolve(__dirname, 'nicsongs', `${cleanName}.mp3`);
-          const query = `${cleanArtist} ${cleanTitle} official audio`;
-
-          if (inFlightDownloads.has(trackKey)) {
-            console.log(`[Breezy Stream] Awaiting in-flight prefetch for: "${artist} - ${title}"...`);
-            filePath = await inFlightDownloads.get(trackKey)!;
-          } else {
-            console.log(`[Breezy Stream] Fast native stream download: "${artist} - ${title}"...`);
-
-            const downloadPromise = new Promise<string | null>((resolve) => {
-              // Fast native download (without slow ffmpeg transcoding delay)
-              const downloadCmd = `yt-dlp --no-check-certificates --extractor-args "youtube:player_client=android,web" -f "ba/b" "ytsearch1:${query}" -o "${targetMp3}"`;
-              exec(downloadCmd, { timeout: 45000 }, (err) => {
-                inFlightDownloads.delete(trackKey);
-                if (!err && fs.existsSync(targetMp3)) {
-                  console.log(`[Breezy Stream] Master audio saved to disk: ${targetMp3}`);
-                  resolve(targetMp3);
-                } else {
-                  // Check if local file exists
-                  const local = findLocalSong(title, artist);
-                  resolve(local);
-                }
-              });
-            });
-
-            inFlightDownloads.set(trackKey, downloadPromise);
-            filePath = await downloadPromise;
-          }
-        }
-
-        // 3. Fallback check for exact song
-        if (!filePath || !fs.existsSync(filePath)) {
-          filePath = findLocalSong(title, artist);
-        }
-
-        if (!filePath || !fs.existsSync(filePath)) {
-          res.statusCode = 404;
-          res.end(JSON.stringify({ error: `Track "${title}" by "${artist}" not found.` }));
+        if (filePath && fs.existsSync(filePath)) {
+          touchLru(filePath);
+          serveLocalRange(filePath, req, res);
           return;
         }
 
-        const stat = fs.statSync(filePath);
-        const fileSize = stat.size;
-        const range = req.headers.range;
+        // 2. If not yet cached, stream directly while saving to local LRU cache
+        const songsDir = path.resolve(__dirname, 'nicsongs');
+        if (!fs.existsSync(songsDir)) {
+          fs.mkdirSync(songsDir, { recursive: true });
+        }
 
-        const contentType = filePath.endsWith('.flac')
-          ? 'audio/flac'
-          : filePath.endsWith('.m4a') || filePath.endsWith('.mp4')
-          ? 'audio/mp4'
-          : filePath.endsWith('.webm')
-          ? 'audio/webm'
-          : 'audio/mpeg';
+        const cleanArtist = artist.replace(/["'$`\\]/g, '');
+        const cleanTitle = title.replace(/["'$`\\]/g, '');
+        const cleanName = `${artist}_${title}`.replace(/[^a-zA-Z0-9_\-\.]/g, '_').toLowerCase();
+        const targetMp3 = path.resolve(songsDir, `${cleanName}.mp3`);
+        const targetTemp = path.resolve(songsDir, `${cleanName}.tmp`);
+        const query = `${cleanArtist} ${cleanTitle} official audio`;
 
-        res.setHeader('Accept-Ranges', 'bytes');
-        res.setHeader('Content-Type', contentType);
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type, Accept');
+        console.log(`[Breezy Stream] Real-time HTTP chunked pipe: "${artist} - ${title}"...`);
 
-        if (range) {
-          const parts = range.replace(/bytes=/, '').split('-');
-          const start = parseInt(parts[0], 10);
-          const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+        // Fast native stream (AAC 128k-160k for instant first-chunk startup)
+        const proc = spawn('yt-dlp', [
+          '--no-check-certificates',
+          '--extractor-args', 'youtube:player_client=android,web',
+          '-f', 'ba[ext=m4a][abr<=160]/ba[abr<=160]/ba/b',
+          '-o', '-',
+          `ytsearch1:${query}`
+        ]);
 
-          if (start >= fileSize || end >= fileSize) {
-            res.statusCode = 416;
-            res.setHeader('Content-Range', `bytes */${fileSize}`);
-            res.end();
-            return;
+        const fileStream = fs.createWriteStream(targetTemp);
+        let headersSent = false;
+
+        proc.stdout.on('data', (chunk) => {
+          fileStream.write(chunk);
+
+          if (!headersSent && !res.headersSent) {
+            headersSent = true;
+            res.writeHead(200, {
+              'Content-Type': 'audio/mp4',
+              'Transfer-Encoding': 'chunked',
+              'Accept-Ranges': 'bytes',
+              'Access-Control-Allow-Origin': '*',
+              'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+              'Access-Control-Allow-Headers': 'Range, Content-Type, Accept',
+              'Cache-Control': 'no-cache',
+            });
           }
 
-          const chunkSize = end - start + 1;
-          const stream = fs.createReadStream(filePath, { start, end });
+          if (!res.writableEnded) {
+            res.write(chunk);
+          }
+        });
 
-          res.statusCode = 206;
-          res.setHeader('Content-Range', `bytes ${start}-${end}/${fileSize}`);
-          res.setHeader('Content-Length', chunkSize);
-          stream.pipe(res);
-        } else {
-          res.statusCode = 200;
-          res.setHeader('Content-Length', fileSize);
-          fs.createReadStream(filePath).pipe(res);
-        }
+        proc.stdout.on('end', () => {
+          fileStream.end();
+          if (!res.writableEnded) {
+            res.end();
+          }
+        });
+
+        proc.on('close', (code) => {
+          if (code === 0 && fs.existsSync(targetTemp)) {
+            try {
+              if (fs.existsSync(targetMp3)) {
+                fs.unlinkSync(targetMp3);
+              }
+              fs.renameSync(targetTemp, targetMp3);
+              touchLru(targetMp3);
+              cleanLruCache(songsDir);
+              console.log(`[Breezy Stream] Master audio cached to disk: ${targetMp3}`);
+            } catch (err: any) {
+              console.warn('[Cache Rename Note]', err.message);
+            }
+          }
+        });
+
+        proc.on('error', (err) => {
+          console.error('[Breezy Stream Error]', err);
+          if (!headersSent && !res.headersSent) {
+            res.statusCode = 500;
+            res.end(JSON.stringify({ error: err.message }));
+          }
+        });
+
+        req.on('close', () => {
+          // If client disconnects or aborts, let proc finish saving file in background!
+        });
       });
     }
   };

@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
+import { touchLru, cleanLruCache } from './lruCache.js';
 
 const MUSIC_DIR = process.env.MUSIC_DIR || (fs.existsSync(path.join(process.cwd(), '..', 'nicsongs')) ? path.join(process.cwd(), '..', 'nicsongs') : path.join(process.cwd(), 'data', 'music'));
 
@@ -55,12 +56,19 @@ export async function getOrDownloadTrack(title, artist) {
   const trackKey = `${artist}_${title}`.toLowerCase().replace(/[^a-z0-9]/g, '');
 
   // 1. If already saved on Proxmox disk, return immediately!
-  if (fs.existsSync(targetFlac)) return { type: 'file', path: targetFlac };
-  if (fs.existsSync(targetMp3)) return { type: 'file', path: targetMp3 };
+  if (fs.existsSync(targetFlac)) {
+    touchLru(targetFlac);
+    return { type: 'file', path: targetFlac };
+  }
+  if (fs.existsSync(targetMp3)) {
+    touchLru(targetMp3);
+    return { type: 'file', path: targetMp3 };
+  }
 
   // 2. Search local storage / nicsongs subdirectories (requiring BOTH artist and title)
   const localMatch = findExistingTrack(MUSIC_DIR, title, artist);
   if (localMatch) {
+    touchLru(localMatch);
     console.log(`[Proxmox Storage] Found local master track: ${localMatch}`);
     return { type: 'file', path: localMatch };
   }
@@ -78,15 +86,18 @@ export async function getOrDownloadTrack(title, artist) {
   const query = `${cleanArtist} ${cleanTitle} official audio`;
 
   const downloadPromise = new Promise((resolve) => {
-    // Fast native audio download without slow ffmpeg transcoding delay
-    const downloadCmd = `yt-dlp --no-check-certificates --extractor-args "youtube:player_client=android,web" -f "ba/b" "ytsearch1:${query}" -o "${targetMp3}"`;
+    // Fast native audio download without slow ffmpeg transcoding delay (128-160k AAC for instant buffering)
+    const downloadCmd = `yt-dlp --no-check-certificates --extractor-args "youtube:player_client=android,web" -f "ba[ext=m4a][abr<=160]/ba[abr<=160]/ba/b" "ytsearch1:${query}" -o "${targetMp3}"`;
     exec(downloadCmd, { timeout: 45000 }, (error) => {
       inFlightDownloads.delete(trackKey);
       if (!error && fs.existsSync(targetMp3)) {
+        touchLru(targetMp3);
+        cleanLruCache(MUSIC_DIR);
         console.log(`[Proxmox Storage] Master audio cached: ${targetMp3}`);
         resolve(targetMp3);
       } else {
         const local = findExistingTrack(MUSIC_DIR, title, artist);
+        if (local) touchLru(local);
         resolve(local);
       }
     });

@@ -235,7 +235,7 @@ export function App() {
   // Track which song IDs have already been prefetched to avoid duplicate background requests
   const prefetchedIdsRef = useRef<Set<string>>(new Set());
 
-  // Prefetch a track to Proxmox/server disk immediately in the background
+  // Prefetch a track to Proxmox/server disk and browser cache immediately in the background
   const prefetchSong = useCallback((song: Song) => {
     if (!song || !song.id || prefetchedIdsRef.current.has(song.id)) return;
     prefetchedIdsRef.current.add(song.id);
@@ -243,7 +243,7 @@ export function App() {
     try {
       fetch(song.audioUrl, {
         method: 'GET',
-        headers: { Range: 'bytes=0-2048' },
+        headers: { Range: 'bytes=0-131071' },
       }).catch(() => {});
     } catch {
       // silent
@@ -333,10 +333,11 @@ export function App() {
     }
   };
 
-  // Hold-to-Queue hook for all interactive track lists
+  // Hold-to-Queue hook with automatic Hover-to-Prefetch for all interactive track lists
   const { holdingSongId, holdProgress, bindHold } = useHoldToQueue({
     onQueue: addToQueue,
     onClick: (song) => playSong(song),
+    onHover: (song) => prefetchSong(song),
     holdDurationMs: 3000,
   });
 
@@ -467,6 +468,19 @@ export function App() {
   }, [searchQuery]);
 
   const filteredSongs = searchQuery.trim() !== '' ? fuzzyResult.matches : null;
+
+  // Spotify Pre-buffer Engine: As soon as search results load, pre-buffer top track in the background
+  useEffect(() => {
+    if (cloudSearchResults.length > 0) {
+      prefetchSong(cloudSearchResults[0]);
+    }
+  }, [cloudSearchResults, prefetchSong]);
+
+  useEffect(() => {
+    if (filteredSongs && filteredSongs.length > 0) {
+      prefetchSong(filteredSongs[0]);
+    }
+  }, [filteredSongs, prefetchSong]);
 
   // Cloud API Search Debounce (Auto-corrects typos & fetches official studio metadata)
   useEffect(() => {

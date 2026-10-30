@@ -4,12 +4,14 @@ import { Song } from '../types';
 interface UseHoldToQueueProps {
   onQueue: (song: Song) => void;
   onClick: (song: Song) => void;
+  onHover?: (song: Song) => void;
   holdDurationMs?: number;
 }
 
 export function useHoldToQueue({
   onQueue,
   onClick,
+  onHover,
   holdDurationMs = 3000,
 }: UseHoldToQueueProps) {
   const [holdingSongId, setHoldingSongId] = useState<string | null>(null);
@@ -107,6 +109,7 @@ export function useHoldToQueue({
     holdingSongId,
     holdProgress,
     bindHold: (song: Song) => ({
+      onMouseEnter: () => onHover?.(song),
       onPointerDown: (e: React.PointerEvent) => startHold(e, song),
       onPointerUp: (e: React.PointerEvent) => endHold(e, song),
       onPointerLeave: () => cleanup(),

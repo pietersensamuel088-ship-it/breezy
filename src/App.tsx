@@ -3,7 +3,7 @@ import { FEATURED_ALBUMS, ALL_SONGS } from './mockData';
 import { Album, Song } from './types';
 import { CircularCarousel, CarouselItem } from './components/CircularCarousel';
 import { CometDial } from './components/CometDial';
-import { OptionWheel } from './components/OptionWheel';
+import { LineSidebar } from './components/LineSidebar';
 import { AudioVisualizer } from './components/AudioEngine';
 import { MusicDownloaderModal } from './components/MusicDownloaderModal';
 import { SyncedLyricsModal } from './components/SyncedLyricsModal';
@@ -39,7 +39,7 @@ export function App() {
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Recently Listened History Queue for OptionWheel
+  // Recently Listened History Queue for LineSidebar
   const [historySongs, setHistorySongs] = useState<Song[]>([
     FEATURED_ALBUMS[0].songs[0], // Under the Influence
     FEATURED_ALBUMS[0].songs[1], // Call Me Every Day
@@ -76,7 +76,7 @@ export function App() {
     albumId: alb.id
   }));
 
-  // Format labels for OptionWheel: "Song Title — Album"
+  // Format labels for LineSidebar: "Song Title — Album"
   const historyLabels = historySongs.map((s) => `${s.title} — ${s.album}`);
 
   // Playback volume handling
@@ -237,7 +237,7 @@ export function App() {
         '--glow-color': currentSong.accentColor,
       } as React.CSSProperties}
     >
-      {/* Background Cinematic Aura - Soft, Organic, Seamless Blur (No block collision) */}
+      {/* Background Cinematic Aura - Soft, Organic, Seamless Blur */}
       <div
         className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[550px] rounded-full blur-[180px] opacity-25 pointer-events-none transition-all duration-1000"
         style={{ backgroundColor: selectedAlbum.accentColor }}
@@ -247,7 +247,7 @@ export function App() {
         style={{ backgroundColor: currentSong.accentColor }}
       />
 
-      {/* TOP BAR / SEAMLESS FLOATING HEADER (No block borders cutting off glows) */}
+      {/* TOP BAR / SEAMLESS FLOATING HEADER */}
       <header className="relative z-30 h-20 px-8 flex items-center justify-between shrink-0 bg-transparent">
         {/* Bold Squishy BREEZY Brand */}
         <div
@@ -298,46 +298,47 @@ export function App() {
 
       {/* MAIN SCREEN STAGE */}
       <main className="relative z-10 flex-1 overflow-hidden flex flex-col justify-center pb-24">
-        {/* VIEW 1: HOME PAGE — EXPANDED 3D CAROUSEL + OPTIONWHEEL ON THE SIDE */}
+        {/* VIEW 1: HOME PAGE — EXPANDED 3D CAROUSEL + REACT BITS LINESIDEBAR ON THE SIDE */}
         {viewMode === 'home' && !filteredSongs && (
           <div className="relative w-full h-full flex items-center justify-between px-4 lg:px-8 select-none animate-fadeIn">
-            {/* LEFT SIDE: REACT BITS OPTIONWHEEL (RECENT LISTENING HISTORY) */}
-            <aside className="hidden lg:flex flex-col justify-center w-64 h-[500px] z-30 pointer-events-auto shrink-0">
-              <div className="flex items-center gap-2 px-6 mb-3 text-zinc-400 font-mono text-[10px] tracking-[0.2em] uppercase">
+            {/* LEFT SIDE: REACT BITS LINESIDEBAR (ULTRA-SMOOTH PROXIMITY LISTENING HISTORY) */}
+            <aside className="hidden lg:flex flex-col justify-center w-80 h-[520px] z-30 pointer-events-auto shrink-0 pl-4">
+              <div className="flex items-center gap-2 px-2 mb-4 text-zinc-400 font-mono text-[10px] tracking-[0.2em] uppercase">
                 <History className="w-3.5 h-3.5 text-luxury-gold" />
-                <span>Last Listened</span>
+                <span>Recently Played</span>
               </div>
 
-              <div className="w-full h-[420px] relative">
-                <OptionWheel
-                  items={historyLabels}
-                  defaultSelected={0}
-                  side="left"
-                  textColor="rgba(255, 255, 255, 0.28)"
-                  activeColor={currentSong.accentColor || '#ffffff'}
-                  fontSize={1.05}
-                  spacing={2.2}
-                  curve={1.25}
-                  tilt={8.5}
-                  blur={1.2}
-                  fade={0.32}
-                  smoothing={240}
-                  inset={24}
-                  draggable={true}
-                  onSelect={(index) => {
+              <div className="w-full">
+                <LineSidebar
+                  items={historyLabels.slice(0, 6)}
+                  accentColor={currentSong.accentColor || '#3b82f6'}
+                  textColor="#a1a1aa"
+                  markerColor="#3f3f46"
+                  showIndex={true}
+                  showMarker={true}
+                  proximityRadius={95}
+                  maxShift={26}
+                  falloff="smooth"
+                  markerLength={42}
+                  tickScale={0.5}
+                  scaleTick={true}
+                  itemGap={22}
+                  fontSize={0.9}
+                  smoothing={110}
+                  defaultActive={0}
+                  onItemClick={(index) => {
                     const selected = historySongs[index];
                     if (selected) playSong(selected);
                   }}
-                  className="w-full h-full"
                 />
               </div>
 
-              <div className="px-6 mt-2 text-[9px] font-mono text-zinc-600 tracking-wider">
-                Scroll &bull; Click track to play
+              <div className="px-2 mt-4 text-[9px] font-mono text-zinc-600 tracking-wider">
+                Hover lines to trace &bull; Click track to play
               </div>
             </aside>
 
-            {/* CENTER: EXPANDED 3D CIRCULAR CAROUSEL (WRAPS AROUND PAGE) */}
+            {/* CENTER: EXPANDED 3D CIRCULAR CAROUSEL */}
             <div className="relative flex-1 h-full flex flex-col items-center justify-center overflow-visible">
               {/* Elevated Table Pedestal Under-Shadow */}
               <div

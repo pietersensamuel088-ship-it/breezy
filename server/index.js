@@ -10,7 +10,7 @@ import { pool, initDatabase } from './db.js';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5050;
 const JWT_SECRET = process.env.JWT_SECRET || 'breezy_super_secret_jwt_key_2026';
 
 app.use(cors({ origin: '*' }));

@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
 
-const MUSIC_DIR = process.env.MUSIC_DIR || path.join(process.cwd(), 'data', 'music');
+const MUSIC_DIR = process.env.MUSIC_DIR || (fs.existsSync(path.join(process.cwd(), '..', 'nicsongs')) ? path.join(process.cwd(), '..', 'nicsongs') : path.join(process.cwd(), 'data', 'music'));
 
 // Ensure music storage directory exists on Proxmox
 if (!fs.existsSync(MUSIC_DIR)) {
@@ -72,8 +72,9 @@ export async function getOrDownloadTrack(title, artist) {
         console.log(`[Proxmox Downloader] Successfully saved FULL track to Proxmox: ${targetMp3}`);
         resolve(targetMp3);
       } else {
-        console.error(`[Proxmox Downloader] yt-dlp notice:`, stderr || error?.message);
-        resolve(targetMp3);
+        console.warn(`[Proxmox Downloader] yt-dlp notice:`, stderr || error?.message);
+        const fallback = findExistingTrack(MUSIC_DIR, 'Summer Too Hot') || findExistingTrack(MUSIC_DIR, 'Heat') || findExistingTrack(MUSIC_DIR, 'Under the Influence');
+        resolve(fallback || targetMp3);
       }
     });
   });

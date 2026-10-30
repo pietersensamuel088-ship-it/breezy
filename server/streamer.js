@@ -32,6 +32,9 @@ export function streamAudioFile(filePath, req, res) {
       'Accept-Ranges': 'bytes',
       'Content-Length': chunksize,
       'Content-Type': contentType,
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+      'Access-Control-Allow-Headers': 'Range, Content-Type, Accept',
       'Cache-Control': 'no-cache, no-store, must-revalidate',
     };
 
@@ -43,6 +46,9 @@ export function streamAudioFile(filePath, req, res) {
       'Content-Length': fileSize,
       'Content-Type': contentType,
       'Accept-Ranges': 'bytes',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+      'Access-Control-Allow-Headers': 'Range, Content-Type, Accept',
       'Cache-Control': 'no-cache, no-store, must-revalidate',
     };
 

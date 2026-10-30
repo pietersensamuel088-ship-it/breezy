@@ -42,6 +42,15 @@ function breezyAudioStreamerPlugin(): Plugin {
           return next();
         }
 
+        if (req.method === 'OPTIONS') {
+          res.statusCode = 204;
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+          res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type, Accept');
+          res.end();
+          return;
+        }
+
         const url = new URL(req.url, 'http://127.0.0.1:5173');
         const title = url.searchParams.get('title') || 'Under the Influence';
         const artist = url.searchParams.get('artist') || 'Chris Brown';

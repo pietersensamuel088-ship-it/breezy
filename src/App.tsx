@@ -47,6 +47,7 @@ export function App() {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [duration, setDuration] = useState<number>(FEATURED_ALBUMS[0].songs[0].duration);
+  const [isBuffering, setIsBuffering] = useState<boolean>(false);
   const [volume, setVolume] = useState<number>(0.85);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -145,17 +146,40 @@ export function App() {
 
 
 
-  const togglePlay = () => {
-    if (isPlaying) {
-      setIsPlaying(false);
-      audioSynth.stopRhythm();
-      if (audioRef.current) audioRef.current.pause();
-    } else {
-      setIsPlaying(true);
-      if (audioRef.current) {
-        audioRef.current.play().catch(() => {});
-      }
+  // Master Audio Sync Effect: Handles song loading and playing reliably without React reconciliation clashes
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const targetUrl = currentSong.audioUrl;
+    let needsSourceChange = false;
+    try {
+      const parsedDesired = new URL(targetUrl, window.location.origin).href;
+      needsSourceChange = audio.src !== parsedDesired;
+    } catch {
+      needsSourceChange = !audio.src.includes(encodeURIComponent(currentSong.title));
     }
+
+    if (needsSourceChange) {
+      setIsBuffering(true);
+      audio.src = targetUrl;
+      audio.load();
+    }
+
+    if (isPlaying) {
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((err) => {
+          console.warn('[Breezy Audio Play Notice]', err);
+        });
+      }
+    } else {
+      audio.pause();
+    }
+  }, [currentSong.id, currentSong.audioUrl, isPlaying]);
+
+  const togglePlay = () => {
+    setIsPlaying((prev) => !prev);
   };
 
   const playSong = (song: Song, shouldNavigateToAlbum = false) => {
@@ -167,6 +191,7 @@ export function App() {
     setCurrentSong(song);
     setCurrentTime(0);
     setDuration(song.duration);
+    setIsBuffering(true);
     setIsPlaying(true);
 
     // Automatically navigate to the song's album
@@ -183,12 +208,6 @@ export function App() {
     // Go to album view if requested or clicked from recently played
     if (shouldNavigateToAlbum) {
       setViewMode('album');
-    }
-
-    if (audioRef.current) {
-      audioRef.current.src = song.audioUrl;
-      audioRef.current.currentTime = 0;
-      audioRef.current.play().catch(() => {});
     }
   };
 
@@ -708,7 +727,9 @@ export function App() {
                       >
                         <div className="flex items-center gap-4">
                           <span className="w-5 text-center text-xs font-mono text-zinc-500 group-hover:text-white transition-colors">
-                            {isCurrent && isPlaying ? (
+                            {isCurrent && isBuffering ? (
+                              <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin mx-auto" />
+                            ) : isCurrent && isPlaying ? (
                               <div className="flex items-end justify-center gap-0.5 h-3.5">
                                 <span className="w-0.5 h-full bg-blue-400 animate-pulse" />
                                 <span className="w-0.5 h-2 bg-blue-400 animate-pulse delay-75" />
@@ -878,11 +899,22 @@ export function App() {
             </h4>
             <p className="text-xs text-zinc-400 truncate font-mono">{currentSong.artist}</p>
             <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-              <span className="text-[10px] text-zinc-400 font-mono tracking-wider">
-                {currentSong.bitrate}
-              </span>
-              <span className="text-[9px] text-zinc-500 font-mono hidden sm:inline">&bull; Click to expand</span>
+              {isBuffering ? (
+                <>
+                  <Loader2 className="w-2.5 h-2.5 text-blue-400 animate-spin" />
+                  <span className="text-[10px] text-blue-400 font-mono tracking-wider animate-pulse">
+                    Streaming master on-demand...
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                  <span className="text-[10px] text-zinc-400 font-mono tracking-wider">
+                    {currentSong.bitrate}
+                  </span>
+                  <span className="text-[9px] text-zinc-500 font-mono hidden sm:inline">&bull; Click to expand</span>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -902,7 +934,9 @@ export function App() {
               onClick={togglePlay}
               className="w-11 h-11 rounded-full bg-white text-black flex items-center justify-center shadow-[0_0_25px_rgba(255,255,255,0.4)] hover:scale-105 active:scale-95 transition-all"
             >
-              {isPlaying ? (
+              {isBuffering ? (
+                <Loader2 className="w-5 h-5 animate-spin text-black" />
+              ) : isPlaying ? (
                 <Pause className="w-5 h-5 fill-black" />
               ) : (
                 <Play className="w-5 h-5 fill-black ml-0.5" />
@@ -1070,14 +1104,20 @@ export function App() {
       {/* REAL HIGH-FIDELITY HTML5 AUDIO ENGINE */}
       <audio
         ref={audioRef}
-        src={currentSong.audioUrl}
         preload="auto"
+        onPlay={() => setIsPlaying(true)}
+        onPlaying={() => {
+          setIsBuffering(false);
+          setIsPlaying(true);
+        }}
+        onWaiting={() => setIsBuffering(true)}
+        onPause={() => setIsPlaying(false)}
         onEnded={() => {
           commitSongToHistory(currentSong);
           handleNext();
         }}
         onTimeUpdate={() => {
-          if (audioRef.current && isPlaying) {
+          if (audioRef.current) {
             setCurrentTime(audioRef.current.currentTime);
           }
         }}
@@ -1088,6 +1128,7 @@ export function App() {
         }}
         onError={(e) => {
           console.error('[Breezy Audio Player Error]', e);
+          setIsBuffering(false);
         }}
       />
     </div>

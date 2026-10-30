@@ -431,23 +431,51 @@ export function App() {
         '--glow-color': currentSong.accentColor,
       } as React.CSSProperties}
     >
-      {/* Dynamic Stretched Album Artwork Background (clearly visible across home & everywhere) */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden z-0 select-none">
+      {/* DYNAMIC FULL-SCREEN ACTIVE SONG ARTWORK BACKGROUND (CLEARLY VISIBLE & TURNS WHILE PLAYING) */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden z-0 select-none flex items-center justify-center">
+        {/* Layer 1: Ambient High-Clarity Full-Screen Backdrop */}
         <img
-          key={selectedAlbum.id}
-          src={selectedAlbum.coverUrl}
+          key={`ambient-${currentSong.id}`}
+          src={currentSong.coverUrl}
           alt=""
-          className="w-full h-full object-cover scale-110 blur-xl opacity-35 transition-all duration-1000 ease-out"
+          className="absolute inset-0 w-full h-full object-cover scale-105 opacity-40 blur-xs transition-all duration-1000 ease-out"
         />
-        {/* Soft Vignette and Cinematic Dark Gradient to keep controls crisp */}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#050608] via-[#050608]/75 to-[#050608]/85" />
-        <div className="absolute inset-0 bg-radial from-transparent via-[#050608]/50 to-[#050608]" />
+
+        {/* Layer 2: Majestic Turning Center Artwork (Clearly visible, scaled, turns smoothly in the background) */}
+        <div
+          className={`relative w-[480px] h-[480px] sm:w-[620px] sm:h-[620px] md:w-[740px] md:h-[740px] rounded-full overflow-hidden shadow-[0_0_120px_rgba(0,0,0,0.95)] border border-white/20 opacity-75 transition-opacity duration-700 ${
+            isPlaying ? 'animate-vinyl-turn' : 'animate-vinyl-turn animate-vinyl-turn-paused'
+          }`}
+          style={{
+            boxShadow: `0 0 100px 20px ${currentSong.accentColor}35, 0 0 160px rgba(0,0,0,0.9)`
+          }}
+        >
+          {/* Crisp, clearly visible cover artwork of the CURRENT PLAYING song that turns */}
+          <img
+            key={`turning-${currentSong.id}`}
+            src={currentSong.coverUrl}
+            alt={currentSong.title}
+            className="w-full h-full object-cover scale-105 transition-all duration-700"
+          />
+
+          {/* Luxury Vinyl Center Spindle & Grooves overlay */}
+          <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle,transparent_45%,rgba(0,0,0,0.4)_75%,rgba(0,0,0,0.85)_100%)] pointer-events-none" />
+          <div className="absolute inset-0 rounded-full border-[18px] border-white/5 pointer-events-none" />
+          <div className="absolute inset-0 rounded-full border-[36px] border-black/20 pointer-events-none" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full bg-black/85 border border-white/25 shadow-2xl flex items-center justify-center">
+            <div className="w-4 h-4 rounded-full bg-white/70 shadow-[0_0_10px_white]" />
+          </div>
+        </div>
+
+        {/* Layer 3: Contrast Shield - Soft radial vignette to ensure UI texts and controls remain crisp & readable */}
+        <div className="absolute inset-0 bg-radial from-transparent via-[#050608]/40 to-[#050608]/85 pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#050608] via-transparent to-[#050608]/70 pointer-events-none" />
       </div>
 
       {/* Background Cinematic Aura - Soft, Organic, Seamless Blur */}
       <div
         className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[550px] rounded-full blur-[180px] opacity-25 pointer-events-none transition-all duration-1000 z-0"
-        style={{ backgroundColor: selectedAlbum.accentColor }}
+        style={{ backgroundColor: currentSong.accentColor }}
       />
       <div
         className="absolute -top-32 -left-32 w-[600px] h-[600px] rounded-full blur-[190px] opacity-15 pointer-events-none transition-all duration-1000 z-0"

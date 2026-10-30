@@ -21,8 +21,17 @@ function createWindow() {
     show: false,
   });
 
-  const devUrl = 'http://127.0.0.1:5173';
-  mainWindow.loadURL(devUrl);
+  const isDev = !app.isPackaged && process.env.NODE_ENV !== 'production';
+  const distPath = path.join(__dirname, '../dist/index.html');
+
+  if (isDev) {
+    const devUrl = 'http://127.0.0.1:5173';
+    mainWindow.loadURL(devUrl).catch(() => {
+      mainWindow.loadFile(distPath);
+    });
+  } else {
+    mainWindow.loadFile(distPath);
+  }
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { FEATURED_ALBUMS, ALL_SONGS } from './mockData';
 import { Album, Song } from './types';
 import { CircularCarousel, CarouselItem } from './components/CircularCarousel';
+import { CometDial } from './components/CometDial';
 import { AudioVisualizer } from './components/AudioEngine';
 import { MusicDownloaderModal } from './components/MusicDownloaderModal';
 import { SyncedLyricsModal } from './components/SyncedLyricsModal';
@@ -17,7 +18,7 @@ import {
   Download,
   Search,
   Sparkles,
-  Disc3
+  Sliders
 } from 'lucide-react';
 
 export function App() {
@@ -30,6 +31,8 @@ export function App() {
   const [volume, setVolume] = useState<number>(0.85);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [isVolumeHovered, setIsVolumeHovered] = useState<boolean>(false);
+  const volumeLeaveTimeout = useRef<number | null>(null);
 
   // Modals
   const [isDownloaderOpen, setIsDownloaderOpen] = useState<boolean>(false);
@@ -49,9 +52,10 @@ export function App() {
 
   // Playback volume handling
   useEffect(() => {
-    audioSynth.setVolume(isMuted ? 0 : volume);
+    const effectiveVol = isMuted ? 0 : volume;
+    audioSynth.setVolume(effectiveVol);
     if (audioRef.current) {
-      audioRef.current.volume = isMuted ? 0 : volume;
+      audioRef.current.volume = effectiveVol;
     }
   }, [volume, isMuted]);
 
@@ -120,6 +124,20 @@ export function App() {
     const m = Math.floor(secs / 60);
     const s = Math.floor(secs % 60);
     return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
+  const handleVolumeMouseEnter = () => {
+    if (volumeLeaveTimeout.current) {
+      clearTimeout(volumeLeaveTimeout.current);
+      volumeLeaveTimeout.current = null;
+    }
+    setIsVolumeHovered(true);
+  };
+
+  const handleVolumeMouseLeave = () => {
+    volumeLeaveTimeout.current = window.setTimeout(() => {
+      setIsVolumeHovered(false);
+    }, 450);
   };
 
   // Filter songs based on search
@@ -213,7 +231,6 @@ export function App() {
             onChange={(index) => {
               setSelectedAlbumIndex(index);
               if (albums[index] && albums[index].songs.length > 0) {
-                // Preload song
                 setCurrentSong(albums[index].songs[0]);
               }
             }}
@@ -396,30 +413,88 @@ export function App() {
           </div>
         </div>
 
-        {/* Right: Volume */}
-        <div className="flex items-center justify-end gap-3 w-1/4 min-w-[180px]">
+        {/* Right: Interactive Hover CometDial Volume HUD */}
+        <div
+          className="relative flex items-center justify-end gap-3 w-1/4 min-w-[180px]"
+          onMouseEnter={handleVolumeMouseEnter}
+          onMouseLeave={handleVolumeMouseLeave}
+        >
+          {/* Floating CometDial HUD Overlay (Fades and springs in on hover) */}
+          <div
+            className={`absolute bottom-full right-0 mb-4 p-5 rounded-3xl bg-[#0b0e14]/95 border border-white/15 backdrop-blur-2xl shadow-[0_20px_50px_rgba(0,0,0,0.85)] flex flex-col items-center transition-all duration-300 z-50 pointer-events-auto ${
+              isVolumeHovered
+                ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto'
+                : 'opacity-0 scale-90 translate-y-3 pointer-events-none'
+            }`}
+            style={{
+              boxShadow: `0 25px 60px -10px rgba(0,0,0,0.9), 0 0 30px ${currentSong.accentColor}25`
+            }}
+          >
+            <div className="text-[10px] font-mono uppercase tracking-[0.2em] text-zinc-400 mb-2 flex items-center gap-1.5">
+              <Sparkles className="w-3 h-3 text-luxury-gold" />
+              <span>Studio Gain</span>
+            </div>
+
+            <CometDial
+              value={Math.round(volume * 100)}
+              defaultValue={85}
+              min={0}
+              max={100}
+              step={1}
+              unit="%"
+              label="Volume"
+              accent={currentSong.accentColor || '#ffffff'}
+              ink="#ffffff"
+              size={170}
+              sweep={310}
+              thickness={5}
+              speed={28}
+              tapBounce={0.25}
+              flickBounce={0.25}
+              momentum={1.1}
+              cometReach={180}
+              cometWidth={10}
+              onChange={(val) => {
+                setVolume(val / 100);
+                setIsMuted(false);
+              }}
+            />
+
+            <div className="text-[9px] font-mono text-zinc-500 mt-2">
+              Drag or click dial to adjust
+            </div>
+          </div>
+
+          {/* Trigger Icon & Mini Volume Pill in footer */}
           <button
             onClick={() => setIsMuted(!isMuted)}
-            className="text-zinc-400 hover:text-white transition-colors"
+            className="text-zinc-400 hover:text-white transition-colors p-2 rounded-xl hover:bg-white/5 active:scale-95"
+            title="Mute / Unmute"
           >
             {isMuted || volume === 0 ? (
-              <VolumeX className="w-4 h-4" />
+              <VolumeX className="w-5 h-5 text-red-400" />
             ) : (
-              <Volume2 className="w-4 h-4" />
+              <Volume2 className="w-5 h-5" />
             )}
           </button>
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.01}
-            value={isMuted ? 0 : volume}
-            onChange={(e) => {
-              setVolume(parseFloat(e.target.value));
-              setIsMuted(false);
-            }}
-            className="w-24 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-white"
-          />
+
+          <div
+            className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/10 hover:border-white/20 cursor-pointer transition-all hover:bg-white/[0.08]"
+            onClick={() => setIsVolumeHovered(!isVolumeHovered)}
+          >
+            <span className="text-xs font-mono font-semibold tracking-wider text-white">
+              {isMuted ? 'MUTED' : `${Math.round(volume * 100)}%`}
+            </span>
+            <div className="w-8 h-1.5 bg-white/10 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-white transition-all duration-150"
+                style={{
+                  width: `${isMuted ? 0 : volume * 100}%`,
+                  backgroundColor: currentSong.accentColor
+                }}
+              />
+            </div>
+          </div>
         </div>
       </footer>
 

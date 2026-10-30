@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { FEATURED_ALBUMS, ALL_SONGS } from './mockData';
+import { FEATURED_ALBUMS, ALL_SONGS, FEATURED_CDN_STREAMS } from './mockData';
 import { Album, Song } from './types';
 import { CircularCarousel, CarouselItem } from './components/CircularCarousel';
 import { CometDial } from './components/CometDial';
@@ -418,9 +418,12 @@ export function App() {
             </button>
           )}
 
-          {viewMode === 'album' && (
+          {(viewMode === 'album' || searchQuery.trim() !== '') && (
             <button
-              onClick={() => setViewMode('home')}
+              onClick={() => {
+                setViewMode('home');
+                setSearchQuery('');
+              }}
               className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-mono text-zinc-300 hover:text-white transition-all hover:scale-105 active:scale-95 cursor-pointer"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
@@ -536,7 +539,10 @@ export function App() {
             {/* Left: Showcase Pedestal of Active Album with bottom-up fade */}
             <div className="w-full md:w-80 shrink-0 flex flex-col items-center md:items-start space-y-5 text-center md:text-left animate-slide-up">
               <button
-                onClick={() => setViewMode('home')}
+                onClick={() => {
+                  setViewMode('home');
+                  setSearchQuery('');
+                }}
                 className="inline-flex items-center gap-2 text-xs font-mono text-zinc-400 hover:text-white transition-colors py-1 cursor-pointer"
               >
                 <ArrowLeft className="w-4 h-4" />
@@ -949,7 +955,7 @@ export function App() {
 
           {/* Visualizer: Gently rises up when playing, and gently sinks down when paused */}
           <div
-            className={`hidden md:flex items-center justify-center w-full transition-all duration-700 ease-out overflow-hidden ${
+            className={`flex items-center justify-center w-full transition-all duration-700 ease-out overflow-hidden ${
               isPlaying
                 ? 'max-h-12 opacity-100 translate-y-0 mt-1'
                 : 'max-h-0 opacity-0 translate-y-3 pointer-events-none'
@@ -1087,6 +1093,14 @@ export function App() {
         onLoadedMetadata={() => {
           if (audioRef.current && audioRef.current.duration) {
             setDuration(audioRef.current.duration);
+          }
+        }}
+        onError={() => {
+          // If primary stream fails (e.g. Proxmox offline), switch to high-speed CDN stream!
+          const fallback = FEATURED_CDN_STREAMS[currentSong.id];
+          if (fallback && audioRef.current && audioRef.current.src !== fallback) {
+            audioRef.current.src = fallback;
+            audioRef.current.play().catch(() => {});
           }
         }}
       />

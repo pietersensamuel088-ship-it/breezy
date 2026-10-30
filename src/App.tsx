@@ -92,12 +92,12 @@ export function App() {
 
   // Recently Listened History Queue for LineSidebar (Maintains stable positions while playing)
   const [historySongs, setHistorySongs] = useState<Song[]>([
-    FEATURED_ALBUMS[0].songs[0], // Under the Influence
-    FEATURED_ALBUMS[0].songs[1], // Call Me Every Day
-    FEATURED_ALBUMS[1].songs[0], // Knife Talk
-    FEATURED_ALBUMS[2].songs[0], // No Guidance
-    FEATURED_ALBUMS[3].songs[0], // Rich Flex
-    FEATURED_ALBUMS[4].songs[0], // Sensational
+    FEATURED_ALBUMS[0]?.songs[0] || ALL_SONGS[0],
+    FEATURED_ALBUMS[1]?.songs[0] || ALL_SONGS[1],
+    FEATURED_ALBUMS[2]?.songs[0] || ALL_SONGS[2],
+    FEATURED_ALBUMS[7]?.songs[0] || ALL_SONGS[3],
+    FEATURED_ALBUMS[9]?.songs[0] || ALL_SONGS[4],
+    FEATURED_ALBUMS[11]?.songs[0] || ALL_SONGS[5],
   ]);
 
   // Draggable & Pinnable Volume State
@@ -124,10 +124,10 @@ export function App() {
     }
     // High-energy starter favorites so list is never blank out of the box
     return [
-      { ...FEATURED_ALBUMS[0].songs[0], likedAt: new Date(Date.now() - 3600000 * 3).toISOString() }, // Under the Influence
-      { ...FEATURED_ALBUMS[0].songs[1], likedAt: new Date(Date.now() - 86400000 * 1).toISOString() }, // Call Me Every Day
-      { ...FEATURED_ALBUMS[2].songs[0], likedAt: new Date(Date.now() - 86400000 * 4).toISOString() }, // No Guidance
-      { ...FEATURED_ALBUMS[3].songs[0], likedAt: new Date(Date.now() - 86400000 * 7).toISOString() }, // Rich Flex
+      { ...(FEATURED_ALBUMS[0]?.songs[0] || ALL_SONGS[0]), likedAt: new Date(Date.now() - 3600000 * 3).toISOString() },
+      { ...(FEATURED_ALBUMS[1]?.songs[0] || ALL_SONGS[1]), likedAt: new Date(Date.now() - 86400000 * 1).toISOString() },
+      { ...(FEATURED_ALBUMS[2]?.songs[0] || ALL_SONGS[2]), likedAt: new Date(Date.now() - 86400000 * 4).toISOString() },
+      { ...(FEATURED_ALBUMS[7]?.songs[0] || ALL_SONGS[3]), likedAt: new Date(Date.now() - 86400000 * 7).toISOString() },
     ];
   });
 
@@ -743,9 +743,6 @@ export function App() {
                   cornerRadius={30}
                   onChange={(index) => {
                     setSelectedAlbumIndex(index);
-                    if (albums[index] && albums[index].songs.length > 0) {
-                      setCurrentSong(albums[index].songs[0]);
-                    }
                   }}
                   onItemClick={(item, index) => {
                     setSelectedAlbumIndex(index);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { FEATURED_ALBUMS, ALL_SONGS } from './mockData';
 import { Album, Song } from './types';
 import { CircularCarousel, CarouselItem } from './components/CircularCarousel';
@@ -13,6 +13,7 @@ import { UserHubModal } from './components/UserHubModal';
 import { UpdateNotificationBanner } from './components/UpdateNotificationBanner';
 import { checkForGitHubUpdate, GitHubCommitInfo } from './utils/githubUpdater';
 import { audioSynth } from './utils/audioSynthesizer';
+import { fuzzySearchSongs, searchCloudMusic } from './utils/songSearchEngine';
 import {
   Play,
   Pause,
@@ -33,7 +34,10 @@ import {
   Music2,
   Maximize2,
   User,
-  GitBranch
+  GitBranch,
+  Globe,
+  Loader2,
+  Radio
 } from 'lucide-react';
 
 export function App() {
@@ -282,13 +286,43 @@ export function App() {
     } catch {}
   };
 
-  // Filter songs if searching
-  const filteredSongs = searchQuery.trim() !== ''
-    ? ALL_SONGS.filter(s =>
-        s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.artist.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : null;
+  // Smart Typo-Tolerant Fuzzy Search & Cloud Music Fetcher
+  const [cloudSearchResults, setCloudSearchResults] = useState<Song[]>([]);
+  const [isSearchingCloud, setIsSearchingCloud] = useState<boolean>(false);
+
+  const fuzzyResult = useMemo(() => {
+    if (!searchQuery.trim()) return { matches: [], didYouMean: null };
+    return fuzzySearchSongs(searchQuery, ALL_SONGS);
+  }, [searchQuery]);
+
+  const filteredSongs = searchQuery.trim() !== '' ? fuzzyResult.matches : null;
+
+  // Cloud API Search Debounce (Auto-corrects typos & fetches official studio metadata)
+  useEffect(() => {
+    if (!searchQuery.trim() || searchQuery.trim().length < 2) {
+      setCloudSearchResults([]);
+      setIsSearchingCloud(false);
+      return;
+    }
+
+    setIsSearchingCloud(true);
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const res = await searchCloudMusic(searchQuery, controller.signal);
+        setCloudSearchResults(res.songs);
+      } catch {
+        setCloudSearchResults([]);
+      } finally {
+        setIsSearchingCloud(false);
+      }
+    }, 350);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [searchQuery]);
 
   return (
     <div
@@ -335,16 +369,30 @@ export function App() {
           </span>
         </div>
 
-        {/* Minimalist Search Underline */}
+        {/* Minimalist Search Underline with Typo & Cloud Indicator */}
         <div className="flex items-center w-72 md:w-96 relative group">
           <Search className="w-4 h-4 text-zinc-500 group-focus-within:text-white transition-colors absolute left-0" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search tracks or artists..."
-            className="w-full pl-7 pr-3 py-1.5 text-xs font-sans text-white placeholder-zinc-500 minimal-search-input focus:outline-hidden"
+            placeholder="Search any song, artist, or typo..."
+            className="w-full pl-7 pr-12 py-1.5 text-xs font-sans text-white placeholder-zinc-500 minimal-search-input focus:outline-hidden"
           />
+          <div className="absolute right-0 flex items-center gap-1.5">
+            {isSearchingCloud && (
+              <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />
+            )}
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="p-1 text-zinc-500 hover:text-white transition-colors cursor-pointer"
+                title="Clear search"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Action Controls */}
@@ -536,6 +584,28 @@ export function App() {
 
             {/* Right: Smooth Sliding Tracklist - Cascades from bottom-up */}
             <div className="flex-1 w-full max-h-[68vh] overflow-y-auto space-y-2 pr-2">
+              {/* "Did you mean?" Typo Auto-Correct Suggestion */}
+              {searchQuery.trim() !== '' && fuzzyResult.didYouMean && (
+                <div className="flex items-center justify-between p-3 rounded-2xl bg-blue-500/10 border border-blue-500/20 backdrop-blur-md animate-fadeIn mb-2">
+                  <div className="flex items-center gap-2.5 text-xs text-zinc-300">
+                    <Sparkles className="w-4 h-4 text-luxury-gold shrink-0 animate-pulse" />
+                    <span>Did you mean:</span>
+                    <button
+                      onClick={() => setSearchQuery(fuzzyResult.didYouMean!)}
+                      className="font-bold text-white underline underline-offset-4 hover:text-luxury-blue transition-colors cursor-pointer"
+                    >
+                      "{fuzzyResult.didYouMean}"
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => setSearchQuery(fuzzyResult.didYouMean!)}
+                    className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-[10px] font-mono text-white transition-all cursor-pointer"
+                  >
+                    Auto-Correct
+                  </button>
+                </div>
+              )}
+
               <div className="flex items-center justify-between border-b border-white/[0.08] pb-3 mb-3 animate-slide-up">
                 <span className="text-xs font-mono uppercase tracking-[0.2em] text-zinc-400">
                   {filteredSongs ? `Search Results (${filteredSongs.length})` : 'Master Studio Tracks'}
@@ -544,6 +614,12 @@ export function App() {
                   {filteredSongs ? '' : `${selectedAlbum.songs.length} Tracks`}
                 </span>
               </div>
+
+              {filteredSongs && filteredSongs.length === 0 && (
+                <div className="p-4 text-center text-xs font-mono text-zinc-500">
+                  No matching tracks found in featured albums. Checking global cloud...
+                </div>
+              )}
 
               {(filteredSongs || selectedAlbum.songs).map((song, index) => {
                 const isCurrent = currentSong.id === song.id;
@@ -601,6 +677,89 @@ export function App() {
                   </div>
                 );
               })}
+
+              {/* GLOBAL MUSIC CLOUD (Live iTunes / Apple Music / Proxmox Stream) */}
+              {searchQuery.trim() !== '' && (cloudSearchResults.length > 0 || isSearchingCloud) && (
+                <div className="pt-6 mt-4 border-t border-white/[0.08] space-y-2">
+                  <div className="flex items-center justify-between pb-2">
+                    <div className="flex items-center gap-2">
+                      <Globe className="w-3.5 h-3.5 text-luxury-blue" />
+                      <span className="text-xs font-mono uppercase tracking-[0.2em] text-zinc-300">
+                        Global Music Cloud (Stream On-Demand via Proxmox)
+                      </span>
+                    </div>
+                    {isSearchingCloud ? (
+                      <span className="flex items-center gap-1.5 text-[10px] font-mono text-blue-400">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        <span>Fetching...</span>
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-mono text-zinc-500">
+                        {cloudSearchResults.length} Cloud Masters Found
+                      </span>
+                    )}
+                  </div>
+
+                  {cloudSearchResults.map((song, index) => {
+                    const isCurrent = currentSong.id === song.id;
+                    return (
+                      <div
+                        key={song.id}
+                        onClick={() => playSong(song)}
+                        style={{ animationDelay: `${index * 40}ms` }}
+                        className={`group relative flex items-center justify-between px-5 py-4 rounded-2xl cursor-pointer transition-all duration-300 animate-slide-up ${
+                          isCurrent
+                            ? 'bg-blue-500/15 border border-blue-500/30 shadow-[0_10px_30px_rgba(0,0,0,0.6)] backdrop-blur-md'
+                            : 'hover:bg-white/5 border border-transparent hover:border-white/5'
+                        }`}
+                      >
+                        <div className="flex items-center gap-4">
+                          <span className="w-5 text-center text-xs font-mono text-zinc-500 group-hover:text-white transition-colors">
+                            {isCurrent && isPlaying ? (
+                              <div className="flex items-end justify-center gap-0.5 h-3.5">
+                                <span className="w-0.5 h-full bg-blue-400 animate-pulse" />
+                                <span className="w-0.5 h-2 bg-blue-400 animate-pulse delay-75" />
+                                <span className="w-0.5 h-3 bg-blue-400 animate-pulse delay-150" />
+                              </div>
+                            ) : (
+                              <Radio className="w-3.5 h-3.5 text-luxury-blue mx-auto" />
+                            )}
+                          </span>
+
+                          <img
+                            src={song.coverUrl}
+                            alt=""
+                            className="w-11 h-11 rounded-xl object-cover shadow-md border border-white/10 transition-transform duration-300 group-hover:scale-105"
+                          />
+
+                          <div>
+                            <h4
+                              className={`text-sm font-semibold tracking-wide transition-colors ${
+                                isCurrent ? 'text-white font-bold' : 'text-zinc-300 group-hover:text-white'
+                              }`}
+                            >
+                              {song.title}
+                            </h4>
+                            <p className="text-xs text-zinc-500 font-mono mt-0.5">
+                              {song.artist} &bull; <span className="text-zinc-400">{song.album}</span>
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-4">
+                          <span className="px-2.5 py-0.5 rounded-md text-[10px] font-mono tracking-wider bg-blue-500/10 text-blue-300 border border-blue-500/20">
+                            Proxmox Stream
+                          </span>
+
+                          <span className="text-xs font-mono text-zinc-400">
+                            {formatTime(song.duration)}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         )}

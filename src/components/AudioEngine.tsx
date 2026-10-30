@@ -74,6 +74,12 @@ export const AudioVisualizer: React.FC<AudioEngineProps> = ({
         step++;
       }
 
+      // Power Optimizer: Stop animation loop completely when idle/paused to save 0% CPU & battery
+      if (!isActuallyPlaying && currentLevel < 0.005) {
+        currentLevel = 0;
+        return;
+      }
+
       animationFrameId = requestAnimationFrame(render);
     };
 

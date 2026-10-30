@@ -15,6 +15,7 @@ import { QueuePopover } from './components/QueuePopover';
 import { LightningEffect } from './components/LightningEffect';
 import { LikedSongsView, LikedSongItem } from './components/LikedSongsView';
 import { useHoldToQueue } from './utils/useHoldToQueue';
+import { useMediaSession } from './utils/useMediaSession';
 import { checkForGitHubUpdate, GitHubCommitInfo } from './utils/githubUpdater';
 import { audioSynth } from './utils/audioSynthesizer';
 import { fuzzySearchSongs, searchCloudMusic } from './utils/songSearchEngine';
@@ -439,6 +440,84 @@ export function App() {
       audioRef.current.currentTime = seekTime;
     }
   };
+
+  // System-level Windows Media Session integration (HUD, Lock Screen, Keyboard & Headset Media Keys)
+  useMediaSession({
+    currentSong,
+    isPlaying,
+    currentTime,
+    duration,
+    onPlay: () => setIsPlaying(true),
+    onPause: () => setIsPlaying(false),
+    onNext: handleNext,
+    onPrev: handlePrev,
+    onSeek: (time) => {
+      setCurrentTime(time);
+      if (audioRef.current) {
+        audioRef.current.currentTime = time;
+      }
+    },
+  });
+
+  // Spotify-Standard Global Hotkeys (Space to Play/Pause, Ctrl+Arrows, M for Mute, L for Like, Esc to exit)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        if (e.key === 'Escape') {
+          target.blur();
+        }
+        return;
+      }
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        togglePlay();
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'ArrowRight') {
+        e.preventDefault();
+        handleNext();
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'ArrowLeft') {
+        e.preventDefault();
+        handlePrev();
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'ArrowUp') {
+        e.preventDefault();
+        setVolume((v) => Math.min(1, Math.round((v + 0.05) * 100) / 100));
+        setIsMuted(false);
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'ArrowDown') {
+        e.preventDefault();
+        setVolume((v) => Math.max(0, Math.round((v - 0.05) * 100) / 100));
+        setIsMuted(false);
+      } else if (e.key === 'm' || e.key === 'M') {
+        e.preventDefault();
+        setIsMuted((prev) => !prev);
+      } else if (e.key === 'l' || e.key === 'L') {
+        e.preventDefault();
+        if (currentSong) {
+          toggleLikeSong(currentSong);
+        }
+      } else if (e.key === 'q' || e.key === 'Q') {
+        e.preventDefault();
+        setIsQueueOpen((prev) => !prev);
+      } else if (e.key === 'Escape') {
+        setIsDownloaderOpen(false);
+        setIsLyricsOpen(false);
+        setIsSongDetailOpen(false);
+        setIsUserHubOpen(false);
+        setIsQueueOpen(false);
+        if (viewMode !== 'home') {
+          setViewMode('home');
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [togglePlay, handleNext, handlePrev, currentSong, toggleLikeSong, viewMode]);
 
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);

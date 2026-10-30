@@ -239,13 +239,20 @@ export const LikedSongsView: React.FC<LikedSongsViewProps> = ({
             const isCurrent = currentSong.id === song.id;
             const isHovered = hoveredIdx === idx;
             const isHolding = holdingSongId === song.id;
+            const holdHandlers = bindHold ? bindHold(song) : null;
 
             return (
               <div
                 key={song.id}
-                onMouseEnter={() => setHoveredIdx(idx)}
-                onMouseLeave={() => setHoveredIdx(null)}
-                {...(bindHold ? bindHold(song) : { onClick: () => onPlaySong(song) })}
+                {...(holdHandlers || { onClick: () => onPlaySong(song) })}
+                onMouseEnter={(e) => {
+                  setHoveredIdx(idx);
+                  holdHandlers?.onMouseEnter?.(e);
+                }}
+                onMouseLeave={(e) => {
+                  setHoveredIdx(null);
+                  holdHandlers?.onPointerLeave?.(e);
+                }}
                 className={`group relative grid grid-cols-[36px_1fr_120px] sm:grid-cols-[40px_1fr_180px_100px] md:grid-cols-[48px_4fr_3fr_2fr_90px] items-center px-4 py-3 rounded-xl cursor-pointer transition-all duration-150 select-none ${
                   isCurrent
                     ? 'bg-white/10 border border-white/15 shadow-md'

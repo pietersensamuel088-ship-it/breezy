@@ -2,6 +2,14 @@ const { app, BrowserWindow, shell, ipcMain } = require('electron');
 const path = require('path');
 const { exec } = require('child_process');
 
+// Chromium hardware acceleration & zero-stutter background audio playback flags
+app.commandLine.appendSwitch('enable-gpu-rasterization');
+app.commandLine.appendSwitch('enable-zero-copy');
+app.commandLine.appendSwitch('ignore-gpu-blocklist');
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+
 let mainWindow;
 
 function createWindow() {

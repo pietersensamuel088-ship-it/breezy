@@ -21,17 +21,25 @@ function createWindow() {
     show: false,
   });
 
-  const isDev = !app.isPackaged && process.env.NODE_ENV !== 'production';
+  const devUrl = 'http://127.0.0.1:5173';
   const distPath = path.join(__dirname, '../dist/index.html');
 
-  if (isDev) {
-    const devUrl = 'http://127.0.0.1:5173';
-    mainWindow.loadURL(devUrl).catch(() => {
+  // Check if live dev server is active on 5173 for instantaneous updates
+  const http = require('http');
+  const req = http.get(devUrl, (res) => {
+    if (res.statusCode === 200) {
+      mainWindow.loadURL(devUrl);
+    } else {
       mainWindow.loadFile(distPath);
-    });
-  } else {
+    }
+  });
+  req.on('error', () => {
     mainWindow.loadFile(distPath);
-  }
+  });
+  req.setTimeout(800, () => {
+    req.destroy();
+    mainWindow.loadFile(distPath);
+  });
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
@@ -66,7 +74,7 @@ ipcMain.handle('git-pull-update', async () => {
 
 ipcMain.handle('app-update-and-restart', async () => {
   return new Promise((resolve) => {
-    exec('git pull origin main', { cwd: path.join(__dirname, '..') }, (error, stdout, stderr) => {
+    exec('git pull origin main && npm run build', { cwd: path.join(__dirname, '..') }, (error, stdout, stderr) => {
       if (error) {
         resolve({ success: false, error: stderr || error.message });
       } else {

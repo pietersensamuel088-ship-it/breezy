@@ -194,7 +194,7 @@ export function App() {
 
 
 
-  // Master Audio Sync Effect: Handles song loading and playing reliably without React reconciliation clashes
+  // Master Audio Sync Effect: Keeps audio state synchronized with React without wiping buffer
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -211,18 +211,22 @@ export function App() {
     if (needsSourceChange) {
       setIsBuffering(true);
       audio.src = targetUrl;
-      audio.load();
+      audio.currentTime = 0;
     }
 
     if (isPlaying) {
-      const playPromise = audio.play();
-      if (playPromise !== undefined) {
-        playPromise.catch((err) => {
-          console.warn('[Breezy Audio Play Notice]', err);
-        });
+      if (audio.paused) {
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+          playPromise.catch((err) => {
+            console.warn('[Breezy Audio Play Notice]', err);
+          });
+        }
       }
     } else {
-      audio.pause();
+      if (!audio.paused) {
+        audio.pause();
+      }
     }
   }, [currentSong.id, currentSong.audioUrl, isPlaying]);
 
@@ -310,6 +314,28 @@ export function App() {
       commitSongToHistory(currentSong);
     }
 
+    // Spotify Instant Playback: Trigger HTML5 Audio immediately in the user click event microtask
+    const audio = audioRef.current;
+    if (audio) {
+      let needsChange = false;
+      try {
+        const parsedDesired = new URL(song.audioUrl, window.location.origin).href;
+        needsChange = audio.src !== parsedDesired;
+      } catch {
+        needsChange = true;
+      }
+      if (needsChange) {
+        audio.src = song.audioUrl;
+        audio.currentTime = 0;
+      }
+      const p = audio.play();
+      if (p !== undefined) {
+        p.catch((err) => {
+          console.warn('[Instant Play Catch]', err);
+        });
+      }
+    }
+
     setCurrentSong(song);
     setCurrentTime(0);
     setDuration(song.duration);
@@ -370,6 +396,16 @@ export function App() {
       prefetchSong(upcomingSong);
     }
   }, [upcomingSong, currentSong.id, prefetchSong]);
+
+  // Pre-buffer first 2 tracks of selected album so opening an album makes playback instant
+  useEffect(() => {
+    if (selectedAlbum && selectedAlbum.songs.length > 0) {
+      prefetchSong(selectedAlbum.songs[0]);
+      if (selectedAlbum.songs.length > 1) {
+        prefetchSong(selectedAlbum.songs[1]);
+      }
+    }
+  }, [selectedAlbum, prefetchSong]);
 
   const handlePrev = () => {
     // Spotify Rule 1: If audio has played for more than 3 seconds, rewind current track to 0:00

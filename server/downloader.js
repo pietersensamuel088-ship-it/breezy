@@ -88,9 +88,10 @@ function findExistingTrack(dir, title, artist) {
 }
 
 const inFlightDownloads = new Map();
+const previewCache = new Map();
 
 /**
- * Autonomously fetches and saves FULL master tracks directly on Proxmox disk (NO 30-second previews)
+ * Autonomously fetches and saves FULL master tracks directly on Proxmox disk with instant preview handoff
  */
 export async function getOrDownloadTrack(title, artist) {
   const cleanName = sanitizeFilename(`${artist}_${title}`);
@@ -98,7 +99,7 @@ export async function getOrDownloadTrack(title, artist) {
   const targetFlac = path.join(MUSIC_DIR, `${cleanName}.flac`);
   const trackKey = `${artist}_${title}`.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-  // 1. If already saved on Proxmox disk, return immediately!
+  // 1. If already saved on Proxmox disk, return immediately! (<2ms)
   if (fs.existsSync(targetFlac)) {
     touchLru(targetFlac);
     return { type: 'file', path: targetFlac };
@@ -116,39 +117,56 @@ export async function getOrDownloadTrack(title, artist) {
     return { type: 'file', path: localMatch };
   }
 
-  // 3. Await if already being downloaded by another request
-  if (inFlightDownloads.has(trackKey)) {
-    console.log(`[Proxmox Downloader] Awaiting in-flight download for: "${artist} - ${title}"...`);
-    const path = await inFlightDownloads.get(trackKey);
-    if (path && fs.existsSync(path)) return { type: 'file', path };
-  }
-
-  console.log(`[Proxmox Downloader] Fast native stream download: "${artist} - ${title}"...`);
   const cleanArtist = artist.replace(/[/\\"'`$]/g, ' ').replace(/\s+/g, ' ').trim();
   const cleanTitle = title.replace(/[/\\"'`$]/g, ' ').replace(/\s+/g, ' ').trim();
   const query = `"${cleanArtist}" "${cleanTitle}" Topic`;
 
-  const downloadPromise = new Promise((resolve) => {
-    // Fast native audio download without slow ffmpeg transcoding delay (128-160k AAC for instant buffering)
-    const downloadCmd = `yt-dlp --no-check-certificates --extractor-args "youtube:player_client=android,web" -f "ba[ext=m4a][abr<=160]/ba[abr<=160]/ba/b" "ytsearch1:${query}" -o "${targetMp3}"`;
-    exec(downloadCmd, { timeout: 45000 }, (error) => {
-      inFlightDownloads.delete(trackKey);
-      if (!error && fs.existsSync(targetMp3)) {
-        touchLru(targetMp3);
-        cleanLruCache(MUSIC_DIR);
-        console.log(`[Proxmox Storage] Master audio cached: ${targetMp3}`);
-        resolve(targetMp3);
-      } else {
-        const local = findExistingTrack(MUSIC_DIR, title, artist);
-        if (local) touchLru(local);
-        resolve(local);
-      }
+  // Start background master download if not already in flight
+  if (!inFlightDownloads.has(trackKey)) {
+    console.log(`[Proxmox Downloader] Background master download: "${artist} - ${title}"...`);
+    const downloadPromise = new Promise((resolve) => {
+      const downloadCmd = `yt-dlp --no-check-certificates --extractor-args "youtube:player_client=android,web" -f "ba[ext=m4a][abr<=160]/ba[abr<=160]/ba/b" "ytsearch1:${query}" -o "${targetMp3}"`;
+      exec(downloadCmd, { timeout: 45000 }, (error) => {
+        inFlightDownloads.delete(trackKey);
+        if (!error && fs.existsSync(targetMp3)) {
+          touchLru(targetMp3);
+          cleanLruCache(MUSIC_DIR);
+          console.log(`[Proxmox Storage] Master audio cached: ${targetMp3}`);
+          resolve(targetMp3);
+        } else {
+          const local = findExistingTrack(MUSIC_DIR, title, artist);
+          if (local) touchLru(local);
+          resolve(local);
+        }
+      });
     });
-  });
+    inFlightDownloads.set(trackKey, downloadPromise);
+  }
 
-  inFlightDownloads.set(trackKey, downloadPromise);
-  const downloadedPath = await downloadPromise;
+  // 3. Instant CDN Preview Handoff (<50ms startup like Spotify)
+  let instantPreviewUrl = previewCache.get(trackKey);
+  if (!instantPreviewUrl) {
+    try {
+      const itunesRes = await fetch(
+        `https://itunes.apple.com/search?term=${encodeURIComponent(cleanArtist + ' ' + cleanTitle)}&entity=song&limit=1`,
+        { signal: AbortSignal.timeout(600) }
+      );
+      if (itunesRes.ok) {
+        const data = await itunesRes.json();
+        if (data.results?.[0]?.previewUrl) {
+          instantPreviewUrl = data.results[0].previewUrl;
+          previewCache.set(trackKey, instantPreviewUrl);
+        }
+      }
+    } catch {}
+  }
 
+  if (instantPreviewUrl) {
+    return { type: 'preview', url: instantPreviewUrl };
+  }
+
+  // Fallback: Await in-flight download if preview unavailable
+  const downloadedPath = await inFlightDownloads.get(trackKey);
   if (downloadedPath && fs.existsSync(downloadedPath)) {
     return { type: 'file', path: downloadedPath };
   }

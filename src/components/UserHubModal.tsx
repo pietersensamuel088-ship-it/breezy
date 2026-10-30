@@ -32,7 +32,7 @@ export function UserHubModal({ isOpen, onClose, currentUser, onSwitchUser }: Use
 
   // Proxmox VE Server Configuration State
   const [backendUrl, setBackendUrl] = useState<string>(() => {
-    return (typeof window !== 'undefined' && localStorage.getItem('breezy_backend_url')) || 'http://127.0.0.1:5000';
+    return (typeof window !== 'undefined' && localStorage.getItem('breezy_backend_url')) || 'http://127.0.0.1:5050';
   });
   const [pingStatus, setPingStatus] = useState<'idle' | 'testing' | 'online' | 'offline'>('idle');
   const [pingLatency, setPingLatency] = useState<number | null>(null);
@@ -228,7 +228,7 @@ pause
               type="text"
               value={backendUrl}
               onChange={(e) => setBackendUrl(e.target.value)}
-              placeholder="http://192.168.1.150:5000"
+              placeholder="http://192.168.1.150:5050"
               className="flex-1 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs font-mono text-white placeholder-zinc-600 focus:outline-none focus:border-luxury-blue transition-all"
             />
             <button

@@ -1,7 +1,7 @@
 import { Album, Song } from './types';
 
 export const getStreamUrl = (songId: string, title: string, artist: string): string => {
-  const backend = (typeof window !== 'undefined' && localStorage.getItem('breezy_backend_url')) || 'http://127.0.0.1:5000';
+  const backend = (typeof window !== 'undefined' && localStorage.getItem('breezy_backend_url')) || 'http://127.0.0.1:5050';
   return `${backend}/api/stream?id=${encodeURIComponent(songId)}&title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}`;
 };
 

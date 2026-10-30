@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { FEATURED_ALBUMS, ALL_SONGS } from './mockData';
 import { Album, Song } from './types';
-import { StoneNicheGallery } from './components/StoneNicheGallery';
+import { CircularCarousel, CarouselItem } from './components/CircularCarousel';
 import { AudioVisualizer } from './components/AudioEngine';
 import { MusicDownloaderModal } from './components/MusicDownloaderModal';
 import { SyncedLyricsModal } from './components/SyncedLyricsModal';
@@ -17,7 +17,7 @@ import {
   Download,
   Search,
   Sparkles,
-  SlidersHorizontal
+  Disc3
 } from 'lucide-react';
 
 export function App() {
@@ -38,7 +38,16 @@ export function App() {
   const selectedAlbum = albums[selectedAlbumIndex] || albums[0];
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Playback handling
+  // Map albums to React Bits CircularCarousel items
+  const carouselItems: CarouselItem[] = albums.map((alb) => ({
+    src: alb.coverUrl,
+    alt: alb.title,
+    title: alb.title,
+    subtitle: `${alb.artist} • ${alb.year}`,
+    albumId: alb.id
+  }));
+
+  // Playback volume handling
   useEffect(() => {
     audioSynth.setVolume(isMuted ? 0 : volume);
     if (audioRef.current) {
@@ -46,7 +55,7 @@ export function App() {
     }
   }, [volume, isMuted]);
 
-  // Timer simulation for tracks
+  // Track timer loop
   useEffect(() => {
     let interval: number;
     if (isPlaying) {
@@ -70,7 +79,6 @@ export function App() {
       if (audioRef.current) audioRef.current.pause();
     } else {
       setIsPlaying(true);
-      // Play high-fidelity synthesized rhythm immediately for browser feedback
       audioSynth.startRhythm(currentSong.genre);
       if (audioRef.current) {
         audioRef.current.play().catch(() => {});
@@ -84,7 +92,6 @@ export function App() {
     setDuration(song.duration);
     setIsPlaying(true);
 
-    // Trigger instant audible audio
     audioSynth.startRhythm(song.genre);
     if (audioRef.current) {
       audioRef.current.src = song.audioUrl;
@@ -115,7 +122,7 @@ export function App() {
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  // Filter songs based on search query
+  // Filter songs based on search
   const displayedSongs = searchQuery.trim() === ''
     ? selectedAlbum.songs
     : ALL_SONGS.filter(s =>
@@ -132,17 +139,17 @@ export function App() {
     >
       {/* Background Ambience */}
       <div
-        className="absolute -top-40 -left-40 w-[700px] h-[700px] rounded-full blur-[180px] opacity-25 pointer-events-none transition-all duration-1000"
+        className="absolute -top-32 -left-32 w-[700px] h-[700px] rounded-full blur-[180px] opacity-25 pointer-events-none transition-all duration-1000"
         style={{ backgroundColor: currentSong.accentColor }}
       />
       <div
-        className="absolute top-1/2 -right-40 w-[600px] h-[600px] rounded-full blur-[200px] opacity-20 pointer-events-none transition-all duration-1000"
+        className="absolute top-1/2 -right-32 w-[600px] h-[600px] rounded-full blur-[200px] opacity-20 pointer-events-none transition-all duration-1000"
         style={{ backgroundColor: selectedAlbum.accentColor }}
       />
 
       {/* TOP BAR / MINIMALIST LINE HEADER */}
       <header className="relative z-30 h-20 px-8 flex items-center justify-between shrink-0">
-        {/* Bold Squishy BREEZY Brand (Unbounded font, no logo icon) */}
+        {/* Bold Squishy BREEZY Brand (Unbounded font) */}
         <div className="flex items-center gap-3">
           <span className="font-unbounded font-black text-2xl md:text-3xl tracking-tighter text-white drop-shadow-[0_0_20px_rgba(255,255,255,0.3)]">
             BREEZY
@@ -164,7 +171,7 @@ export function App() {
           />
         </div>
 
-        {/* Action Controls - Sleek & Reactive */}
+        {/* Action Controls */}
         <div className="flex items-center gap-4">
           <button
             onClick={() => setIsDownloaderOpen(true)}
@@ -178,26 +185,50 @@ export function App() {
 
       {/* MAIN SCROLLABLE BODY */}
       <main className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden flex flex-col pb-28">
-        {/* 3D CYLINDER SPHERE STAGE */}
-        <StoneNicheGallery
-          albums={albums}
-          selectedIndex={selectedAlbumIndex}
-          onSelectIndex={(idx) => {
-            setSelectedAlbumIndex(idx);
-            if (albums[idx].songs.length > 0) {
-              playSong(albums[idx].songs[0]);
-            }
-          }}
-          onPlayAlbum={(album) => {
-            if (album.songs.length > 0) {
-              playSong(album.songs[0]);
-            }
-          }}
-          isPlaying={isPlaying}
-        />
+        {/* REACT BITS CIRCULAR CAROUSEL STAGE */}
+        <div className="relative w-full h-[520px] md:h-[560px] flex flex-col items-center justify-center overflow-visible select-none">
+          {/* Spotlight Source & Cone */}
+          <div
+            className="absolute top-4 left-1/2 -translate-x-1/2 w-48 h-2 rounded-full blur-md opacity-80 z-20 pointer-events-none transition-colors duration-700"
+            style={{ backgroundColor: selectedAlbum.accentColor, boxShadow: `0 0 60px 15px ${selectedAlbum.accentColor}` }}
+          />
+
+          <CircularCarousel
+            items={carouselItems}
+            preset="cylinder"
+            intro="assemble"
+            cardWidth={240}
+            aspectRatio={1}
+            speed={10}
+            captions={true}
+            gap={45}
+            tilt={-3}
+            perspective={2100}
+            momentum={0.65}
+            snap={true}
+            parallax={0.35}
+            stretch={0.45}
+            fadeColor="#050608"
+            cornerRadius={22}
+            onChange={(index) => {
+              setSelectedAlbumIndex(index);
+              if (albums[index] && albums[index].songs.length > 0) {
+                // Preload song
+                setCurrentSong(albums[index].songs[0]);
+              }
+            }}
+            onItemClick={(item, index) => {
+              setSelectedAlbumIndex(index);
+              if (albums[index] && albums[index].songs.length > 0) {
+                playSong(albums[index].songs[0]);
+              }
+            }}
+            className="w-full h-full"
+          />
+        </div>
 
         {/* TRACKLIST CONTAINER */}
-        <div className="w-full max-w-4xl mx-auto px-6 pt-4 space-y-4">
+        <div className="w-full max-w-4xl mx-auto px-6 pt-2 space-y-4">
           <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
             <div>
               <h3 className="text-xl md:text-2xl font-unbounded font-bold tracking-tight text-white">

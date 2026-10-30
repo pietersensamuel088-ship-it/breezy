@@ -14,20 +14,23 @@ function sanitizeFilename(str) {
 }
 
 /**
- * Searches local directory for an existing full song by title
+ * Searches local directory for an existing full song by BOTH title and artist
  */
-function findExistingTrack(dir, title) {
+function findExistingTrack(dir, title, artist) {
   if (!fs.existsSync(dir)) return null;
   const cleanTitle = title.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const cleanArtist = artist.toLowerCase().replace(/[^a-z0-9]/g, '');
 
   try {
     const entries = fs.readdirSync(dir, { recursive: true, withFileTypes: true });
     for (const entry of entries) {
       if (entry.isFile()) {
         const nameLower = entry.name.toLowerCase();
-        if (nameLower.endsWith('.mp3') || nameLower.endsWith('.flac') || nameLower.endsWith('.m4a')) {
+        if (nameLower.endsWith('.mp3') || nameLower.endsWith('.flac') || nameLower.endsWith('.m4a') || nameLower.endsWith('.wav')) {
           const cleanName = nameLower.replace(/[^a-z0-9]/g, '');
-          if (cleanName.includes(cleanTitle)) {
+          const artistMatch = cleanArtist.length < 3 || cleanName.includes(cleanArtist);
+          const titleMatch = cleanName.includes(cleanTitle);
+          if (artistMatch && titleMatch) {
             const parent = entry.parentPath || dir;
             return path.join(parent, entry.name);
           }
@@ -52,8 +55,8 @@ export async function getOrDownloadTrack(title, artist) {
   if (fs.existsSync(targetFlac)) return targetFlac;
   if (fs.existsSync(targetMp3)) return targetMp3;
 
-  // 2. Search local storage / nicsongs subdirectories
-  const localMatch = findExistingTrack(MUSIC_DIR, title);
+  // 2. Search local storage / nicsongs subdirectories (requiring BOTH artist and title)
+  const localMatch = findExistingTrack(MUSIC_DIR, title, artist);
   if (localMatch) {
     console.log(`[Proxmox Storage] Found local master track: ${localMatch}`);
     return localMatch;
@@ -78,8 +81,8 @@ export async function getOrDownloadTrack(title, artist) {
         if (fs.existsSync(targetMp3)) {
           resolve(targetMp3);
         } else {
-          // Check if local track for this song exists
-          const local = findExistingTrack(MUSIC_DIR, title);
+          // Check if local track for this song exists (requiring BOTH artist and title)
+          const local = findExistingTrack(MUSIC_DIR, title, artist);
           if (local) {
             resolve(local);
           } else {

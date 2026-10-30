@@ -4,12 +4,21 @@ import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
 
-function findLocalSong(title: string): string | null {
+function findLocalSong(title: string, artist: string): string | null {
   const songsDir = path.resolve(__dirname, 'nicsongs');
   if (!fs.existsSync(songsDir)) return null;
 
-  const cleanQuery = title.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const cleanArtist = artist.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const cleanTitle = title.toLowerCase().replace(/[^a-z0-9]/g, '');
 
+  // 1. Direct specific file check: e.g. "jhene_aiko_guidance.mp3"
+  const sanitizedName = `${artist}_${title}`.replace(/[^a-zA-Z0-9_\-\.]/g, '_').toLowerCase();
+  for (const ext of ['.mp3', '.flac', '.m4a', '.wav']) {
+    const directPath = path.join(songsDir, `${sanitizedName}${ext}`);
+    if (fs.existsSync(directPath)) return directPath;
+  }
+
+  // 2. Scan recursively requiring BOTH artist and title to match
   function scan(dir: string): string | null {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     for (const entry of entries) {
@@ -19,9 +28,15 @@ function findLocalSong(title: string): string | null {
         if (found) return found;
       } else if (entry.isFile()) {
         const lower = entry.name.toLowerCase();
-        if (lower.endsWith('.mp3') || lower.endsWith('.flac') || lower.endsWith('.m4a')) {
+        if (lower.endsWith('.mp3') || lower.endsWith('.flac') || lower.endsWith('.m4a') || lower.endsWith('.wav')) {
           const cleanName = lower.replace(/[^a-z0-9]/g, '');
-          if (cleanName.includes(cleanQuery)) {
+          
+          // Require ARTIST to match if artist has more than 2 alphanumeric chars
+          const artistMatch = cleanArtist.length < 3 || cleanName.includes(cleanArtist);
+          // Require EXACT full TITLE string to match
+          const titleMatch = cleanName.includes(cleanTitle);
+
+          if (artistMatch && titleMatch) {
             return fullPath;
           }
         }
@@ -58,7 +73,7 @@ function breezyAudioStreamerPlugin(): Plugin {
         console.log(`[Breezy Stream] Request for: "${artist} - ${title}"`);
 
         // 1. Check local nicsongs library
-        let filePath = findLocalSong(title);
+        let filePath = findLocalSong(title, artist);
 
         // 2. If not yet downloaded on PC, autonomously download full master track via yt-dlp!
         if (!filePath || !fs.existsSync(filePath)) {
@@ -92,7 +107,7 @@ function breezyAudioStreamerPlugin(): Plugin {
 
         // 3. Check if local song matching the requested title exists
         if (!filePath || !fs.existsSync(filePath)) {
-          filePath = findLocalSong(title);
+          filePath = findLocalSong(title, artist);
         }
 
         if (!filePath || !fs.existsSync(filePath)) {

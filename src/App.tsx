@@ -691,17 +691,31 @@ export function App() {
 
       {/* TOP BAR / SEAMLESS FLOATING HEADER */}
       <header className="relative z-30 h-20 px-8 flex items-center justify-between shrink-0 bg-transparent">
-        {/* Bold Squishy BREEZY Brand */}
+        {/* Bold Squishy BREEZY Brand with Custom Emblem Logo */}
         <div
           onClick={() => { setViewMode('home'); setSearchQuery(''); }}
           className="flex items-center gap-3 cursor-pointer group"
         >
-          <span className="font-unbounded font-black text-2xl md:text-3xl tracking-tighter text-white drop-shadow-[0_0_20px_rgba(255,255,255,0.3)] group-hover:scale-105 transition-transform">
-            BREEZY
-          </span>
-          <span className="text-[10px] font-mono tracking-[0.2em] uppercase text-zinc-500 hidden sm:inline">
-            // MASTER AUDIO
-          </span>
+          <div className="relative w-10 h-10 rounded-xl overflow-hidden bg-black/60 border border-red-500/30 shadow-[0_0_15px_rgba(239,68,68,0.3)] group-hover:shadow-[0_0_25px_rgba(239,68,68,0.6)] group-hover:scale-105 transition-all duration-300 flex items-center justify-center">
+            <img
+              src="/icon.png"
+              alt="Breezy Logo"
+              className="w-8 h-8 object-contain filter drop-shadow-[0_0_8px_rgba(239,68,68,0.8)]"
+            />
+          </div>
+          <div className="flex flex-col">
+            <div className="flex items-center gap-2">
+              <span className="font-unbounded font-black text-2xl md:text-3xl tracking-tighter text-white drop-shadow-[0_0_20px_rgba(255,255,255,0.3)] group-hover:text-red-50 transition-colors">
+                BREEZY
+              </span>
+              <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-red-500/10 border border-red-500/20 text-red-400 font-semibold tracking-wider">
+                V1.0
+              </span>
+            </div>
+            <span className="text-[9px] font-mono tracking-[0.2em] uppercase text-zinc-500 hidden sm:inline">
+              // MASTER AUDIO
+            </span>
+          </div>
         </div>
 
         {/* Minimalist Search Underline with Typo & Cloud Indicator */}

@@ -21,6 +21,7 @@ function createWindow() {
     backgroundColor: '#050608',
     title: 'BREEZY',
     frame: true,
+    icon: path.join(__dirname, '../public/icon.png'),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,

@@ -157,7 +157,6 @@ export function App() {
       if (audioRef.current) audioRef.current.pause();
     } else {
       setIsPlaying(true);
-      audioSynth.startRhythm(currentSong.genre);
       if (audioRef.current) {
         audioRef.current.play().catch(() => {});
       }
@@ -191,7 +190,6 @@ export function App() {
       setViewMode('album');
     }
 
-    audioSynth.startRhythm(song.genre);
     if (audioRef.current) {
       audioRef.current.src = song.audioUrl;
       audioRef.current.currentTime = 0;

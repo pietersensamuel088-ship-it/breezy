@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { FEATURED_ALBUMS, ALL_SONGS, FEATURED_CDN_STREAMS } from './mockData';
+import { FEATURED_ALBUMS, ALL_SONGS } from './mockData';
 import { Album, Song } from './types';
 import { CircularCarousel, CarouselItem } from './components/CircularCarousel';
 import { CometDial } from './components/CometDial';
@@ -1086,13 +1086,8 @@ export function App() {
             setDuration(audioRef.current.duration);
           }
         }}
-        onError={() => {
-          // If primary stream fails (e.g. Proxmox offline), switch to high-speed CDN stream!
-          const fallback = FEATURED_CDN_STREAMS[currentSong.id];
-          if (fallback && audioRef.current && audioRef.current.src !== fallback) {
-            audioRef.current.src = fallback;
-            audioRef.current.play().catch(() => {});
-          }
+        onError={(e) => {
+          console.error('[Breezy Audio Player Error]', e);
         }}
       />
     </div>

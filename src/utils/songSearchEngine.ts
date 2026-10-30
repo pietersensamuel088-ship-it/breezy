@@ -171,7 +171,7 @@ export async function searchCloudMusic(query: string, signal?: AbortSignal): Pro
         album,
         coverUrl: cover,
         duration: durationSec,
-        audioUrl: track.previewUrl || getStreamUrl(trackId, title, artist),
+        audioUrl: getStreamUrl(trackId, title, artist),
         bitrate: 'Master Stream (Proxmox)',
         format: 'FLAC',
         year: releaseYear,

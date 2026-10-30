@@ -1,19 +1,5 @@
 import { Album, Song } from './types';
 
-export const FEATURED_CDN_STREAMS: Record<string, string> = {
-  'cb-1': 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/b7/54/66/b7546682-84c1-0bc8-ac68-8a19236c33d4/mzaf_10117396265292486794.plus.aac.p.m4a',
-  'cb-2': 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/f1/8c/e8/f18ce833-18ec-1cc2-edaf-4b44c0a027b5/mzaf_14996962514019711459.plus.aac.p.m4a',
-  'cb-3': 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/3e/b9/db/3eb9dbfd-62d8-6fc9-a540-a627715959cf/mzaf_6232508096044910748.plus.aac.p.m4a',
-  'cb-4': 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/e4/5e/69/e45e69fb-8c39-da0a-73af-6442f029002e/mzaf_17924132426770997035.plus.aac.p.m4a',
-  'cb-5': 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/03/da/8d/03da8d76-39db-f338-8b95-6cb4def91acd/mzaf_5990611323505170141.plus.aac.p.m4a',
-  'cb-6': 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/6c/6c/58/6c6c5841-0dfa-c6bf-6b3d-8babc314548a/mzaf_6762199776049195179.plus.aac.p.m4a',
-  'drake-1': 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/5d/85/19/5d851900-855b-2ddd-7579-d2261f312201/mzaf_8425567731498196475.plus.aac.p.m4a',
-  'drake-2': 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/97/72/7f/97727f97-5bbd-a955-3b37-ab1722f879fd/mzaf_17116570178243478218.plus.aac.p.m4a',
-  'drake-3': 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/91/68/12/916812d4-eed9-7b9c-4fed-0bf7e717e4c0/mzaf_4929194385323738667.plus.aac.p.m4a',
-  'drake-4': 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/10/ef/d0/10efd06a-5851-ccde-6b48-e9abca6fabcb/mzaf_1867457390193614872.plus.aac.p.m4a',
-  'drake-5': 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/74/85/0a/74850aac-0c38-9fba-56aa-376e6b7bafb3/mzaf_10040140038592228176.plus.aac.p.m4a',
-};
-
 export const getStreamUrl = (songId: string, title: string, artist: string): string => {
   const customBackend = typeof window !== 'undefined' ? localStorage.getItem('breezy_backend_url') : null;
   // If user configured a Proxmox backend URL, route directly to Proxmox!

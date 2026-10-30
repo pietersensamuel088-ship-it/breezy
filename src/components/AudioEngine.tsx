@@ -9,9 +9,6 @@ interface AudioEngineProps {
   audioElement?: HTMLAudioElement | null;
 }
 
-// Global WeakMap to prevent "MediaElementAudioSourceNode already connected" error
-const audioSourceMap = new WeakMap<HTMLAudioElement, { analyser: AnalyserNode; dataArray: Uint8Array }>();
-
 export const AudioVisualizer: React.FC<AudioEngineProps> = ({
   isPlaying,
   accentColor,
@@ -28,53 +25,32 @@ export const AudioVisualizer: React.FC<AudioEngineProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    let analyser: AnalyserNode | null = null;
-    let dataArray: Uint8Array | null = null;
-
-    if (audioElement) {
-      try {
-        if (audioSourceMap.has(audioElement)) {
-          const cached = audioSourceMap.get(audioElement)!;
-          analyser = cached.analyser;
-          dataArray = cached.dataArray;
-        } else {
-          const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-          if (AudioContextClass) {
-            const audioCtx = new AudioContextClass();
-            const source = audioCtx.createMediaElementSource(audioElement);
-            analyser = audioCtx.createAnalyser();
-            analyser.fftSize = 128;
-            analyser.smoothingTimeConstant = 0.8;
-            source.connect(analyser);
-            analyser.connect(audioCtx.destination);
-            dataArray = new Uint8Array(analyser.frequencyBinCount);
-            audioSourceMap.set(audioElement, { analyser, dataArray });
-          }
-        }
-      } catch {
-        // Fallback gracefully
-      }
-    }
-
     let animationFrameId: number;
+    let step = 0;
+    let currentLevel = 0;
 
     const render = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      const isActuallyAudible = isPlaying && audioElement && !audioElement.paused && audioElement.currentTime > 0;
-
-      if (analyser && dataArray && isActuallyAudible) {
-        analyser.getByteFrequencyData(dataArray as any);
-      }
+      // Only animate if audio is ACTUALLY playing and not paused
+      const isActuallyPlaying = isPlaying && audioElement && !audioElement.paused && audioElement.currentTime > 0;
+      const targetLevel = isActuallyPlaying ? 1.0 : 0.0;
+      currentLevel += (targetLevel - currentLevel) * 0.1;
 
       const barWidth = canvas.width / numBars - 2;
 
       for (let i = 0; i < numBars; i++) {
-        let barHeight = 2; // Flat line when silent
+        let barHeight = 2; // Flat subtle line when paused/buffering
 
-        if (isActuallyAudible && dataArray) {
-          const rawVal = dataArray[i % dataArray.length] || 0;
-          barHeight = Math.max(2, (rawVal / 255) * canvas.height * 0.95);
+        if (currentLevel > 0.05) {
+          // Dynamic frequency waves simulating real audio spectrum
+          const freq1 = Math.sin(i * 0.25 + step * 0.09) * 0.5 + 0.5;
+          const freq2 = Math.cos(i * 0.18 - step * 0.06) * 0.5 + 0.5;
+          const bass = i < 14 ? Math.sin(step * 0.12) * 16 + 18 : 0;
+          const mids = i >= 14 && i < 32 ? Math.cos(step * 0.08 + i * 0.2) * 10 + 12 : 0;
+
+          const dynamicH = (freq1 * freq2 * (canvas.height * 0.7) + bass + mids) * currentLevel;
+          barHeight = Math.max(2, Math.min(canvas.height - 2, dynamicH));
         }
 
         const x = i * (barWidth + 2);
@@ -86,12 +62,16 @@ export const AudioVisualizer: React.FC<AudioEngineProps> = ({
         gradient.addColorStop(1, 'rgba(255, 255, 255, 0.05)');
 
         ctx.fillStyle = gradient;
-        ctx.shadowColor = isActuallyAudible ? accentColor : 'transparent';
-        ctx.shadowBlur = isActuallyAudible ? 10 : 0;
+        ctx.shadowColor = currentLevel > 0.2 ? accentColor : 'transparent';
+        ctx.shadowBlur = Math.round(10 * currentLevel);
 
         ctx.beginPath();
         ctx.roundRect(x, y, Math.max(1, barWidth), barHeight, [2, 2, 0, 0]);
         ctx.fill();
+      }
+
+      if (currentLevel > 0.01) {
+        step++;
       }
 
       animationFrameId = requestAnimationFrame(render);

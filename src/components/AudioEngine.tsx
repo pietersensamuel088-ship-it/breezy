@@ -3,10 +3,20 @@ import React, { useEffect, useRef } from 'react';
 interface AudioEngineProps {
   isPlaying: boolean;
   accentColor: string;
+  width?: number;
+  height?: number;
+  numBars?: number;
 }
 
-export const AudioVisualizer: React.FC<AudioEngineProps> = ({ isPlaying, accentColor }) => {
+export const AudioVisualizer: React.FC<AudioEngineProps> = ({
+  isPlaying,
+  accentColor,
+  width = 340,
+  height = 50,
+  numBars = 48,
+}) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const levelRef = useRef<number>(isPlaying ? 1.0 : 0.0);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -18,35 +28,38 @@ export const AudioVisualizer: React.FC<AudioEngineProps> = ({ isPlaying, accentC
     let step = 0;
 
     const render = () => {
+      // Gentle spring/lerp interpolation so synthesizer levels rise & fall gracefully
+      const targetLevel = isPlaying ? 1.0 : 0.0;
+      levelRef.current += (targetLevel - levelRef.current) * 0.065;
+      const level = levelRef.current;
+
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      const numBars = 48;
       const barWidth = canvas.width / numBars - 2;
 
       for (let i = 0; i < numBars; i++) {
-        // Generate dynamic organic wave movement reacting to play state
-        let barHeight = 6;
-        if (isPlaying) {
-          const wave1 = Math.sin((i * 0.2) + (step * 0.08)) * 0.5 + 0.5;
-          const wave2 = Math.cos((i * 0.15) - (step * 0.05)) * 0.5 + 0.5;
-          const bassBoost = (i < 12) ? Math.sin(step * 0.12) * 12 + 14 : 0;
-          barHeight = Math.max(6, (wave1 * wave2 * 38) + bassBoost);
-        }
+        // Continuous wave physics scaled by gentle rising/falling level
+        const wave1 = Math.sin(i * 0.2 + step * 0.07) * 0.5 + 0.5;
+        const wave2 = Math.cos(i * 0.15 - step * 0.04) * 0.5 + 0.5;
+        const bassBoost = i < 14 ? Math.sin(step * 0.1) * 12 + 14 : 0;
+
+        const dynamicHeight = (wave1 * wave2 * (canvas.height * 0.72) + bassBoost) * level;
+        const barHeight = Math.max(3, dynamicHeight + 2 * (1 - level));
 
         const x = i * (barWidth + 2);
         const y = canvas.height - barHeight;
 
         // Gradient for bars
         const gradient = ctx.createLinearGradient(0, y, 0, canvas.height);
-        gradient.addColorStop(0, accentColor);
-        gradient.addColorStop(1, 'rgba(255, 255, 255, 0.05)');
+        gradient.addColorStop(0, accentColor || '#ffffff');
+        gradient.addColorStop(1, 'rgba(255, 255, 255, 0.04)');
 
         ctx.fillStyle = gradient;
-        ctx.shadowColor = isPlaying ? accentColor : 'transparent';
-        ctx.shadowBlur = isPlaying ? 10 : 0;
+        ctx.shadowColor = level > 0.1 ? accentColor : 'transparent';
+        ctx.shadowBlur = Math.round(12 * level);
 
         ctx.beginPath();
-        ctx.roundRect(x, y, barWidth, barHeight, [2, 2, 0, 0]);
+        ctx.roundRect(x, y, Math.max(1, barWidth), barHeight, [2, 2, 0, 0]);
         ctx.fill();
       }
 
@@ -59,15 +72,15 @@ export const AudioVisualizer: React.FC<AudioEngineProps> = ({ isPlaying, accentC
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [isPlaying, accentColor]);
+  }, [isPlaying, accentColor, numBars]);
 
   return (
     <div className="w-full flex items-center justify-center">
       <canvas
         ref={canvasRef}
-        width={340}
-        height={50}
-        className="opacity-90 transition-opacity duration-300"
+        width={width}
+        height={height}
+        className="opacity-95 transition-opacity duration-500"
       />
     </div>
   );

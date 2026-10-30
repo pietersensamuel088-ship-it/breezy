@@ -270,13 +270,26 @@ export function App() {
         '--glow-color': currentSong.accentColor,
       } as React.CSSProperties}
     >
+      {/* Dynamic Stretched Album Artwork Background (clearly visible across home & everywhere) */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden z-0 select-none">
+        <img
+          key={selectedAlbum.id}
+          src={selectedAlbum.coverUrl}
+          alt=""
+          className="w-full h-full object-cover scale-110 blur-xl opacity-35 transition-all duration-1000 ease-out"
+        />
+        {/* Soft Vignette and Cinematic Dark Gradient to keep controls crisp */}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#050608] via-[#050608]/75 to-[#050608]/85" />
+        <div className="absolute inset-0 bg-radial from-transparent via-[#050608]/50 to-[#050608]" />
+      </div>
+
       {/* Background Cinematic Aura - Soft, Organic, Seamless Blur */}
       <div
-        className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[550px] rounded-full blur-[180px] opacity-25 pointer-events-none transition-all duration-1000"
+        className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[550px] rounded-full blur-[180px] opacity-25 pointer-events-none transition-all duration-1000 z-0"
         style={{ backgroundColor: selectedAlbum.accentColor }}
       />
       <div
-        className="absolute -top-32 -left-32 w-[600px] h-[600px] rounded-full blur-[190px] opacity-15 pointer-events-none transition-all duration-1000"
+        className="absolute -top-32 -left-32 w-[600px] h-[600px] rounded-full blur-[190px] opacity-15 pointer-events-none transition-all duration-1000 z-0"
         style={{ backgroundColor: currentSong.accentColor }}
       />
 
@@ -344,7 +357,7 @@ export function App() {
       <main className="relative z-10 flex-1 overflow-hidden flex flex-col justify-center pb-24">
         {/* VIEW 1: HOME PAGE — EXPANDED 3D CAROUSEL + REACT BITS LINESIDEBAR ON THE SIDE */}
         {viewMode === 'home' && !filteredSongs && (
-          <div className="relative w-full h-full flex items-center justify-between px-4 lg:px-8 select-none animate-fadeIn">
+          <div className="relative w-full h-full flex items-center justify-between px-4 lg:px-8 select-none animate-exhibition-glide">
             {/* LEFT SIDE: REACT BITS LINESIDEBAR (RECENT LISTENING HISTORY) */}
             <aside className="hidden lg:flex flex-col justify-center w-80 h-[520px] z-30 pointer-events-auto shrink-0 pl-4">
               <div className="flex items-center gap-2 px-2 mb-4 text-zinc-400 font-mono text-[10px] tracking-[0.2em] uppercase">
@@ -385,18 +398,18 @@ export function App() {
               </div>
             </aside>
 
-            {/* CENTER: EXPANDED 3D CIRCULAR CAROUSEL */}
+            {/* CENTER: EXPANDED 3D CIRCULAR CAROUSEL (Wrapped wider across stage without right box) */}
             <div className="relative flex-1 h-full flex flex-col items-center justify-center overflow-visible">
               {/* Elevated Table Pedestal Under-Shadow */}
               <div
-                className="absolute bottom-12 left-1/2 -translate-x-1/2 w-[850px] max-w-[80vw] h-14 rounded-full blur-3xl opacity-70 pointer-events-none transition-colors duration-700"
+                className="absolute bottom-12 left-1/2 -translate-x-1/2 w-[900px] max-w-[85vw] h-14 rounded-full blur-3xl opacity-70 pointer-events-none transition-colors duration-700"
                 style={{
                   backgroundColor: '#000000',
                   boxShadow: `0 45px 120px 40px rgba(0,0,0,0.98), 0 0 60px 15px ${selectedAlbum.accentColor}25`
                 }}
               />
 
-              {/* Majestic CircularCarousel Wrapping Almost the Whole Stage */}
+              {/* Majestic CircularCarousel Wrapping Across the Stage */}
               <div className="w-full h-[640px] max-h-[80vh] flex items-center justify-center">
                 <CircularCarousel
                   items={carouselItems}
@@ -429,35 +442,12 @@ export function App() {
                 />
               </div>
             </div>
-
-            {/* RIGHT SIDE: SYMMETRICAL COMPACT STATS */}
-            <aside className="hidden lg:flex flex-col justify-center items-end w-64 h-[500px] z-30 pointer-events-none pr-4 shrink-0">
-              <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/5 backdrop-blur-md text-right space-y-3 pointer-events-auto">
-                <div className="flex items-center justify-end gap-2 text-xs font-mono text-zinc-400">
-                  <span>AUDIO FIDELITY</span>
-                  <Music2 className="w-3.5 h-3.5 text-luxury-gold" />
-                </div>
-                <div>
-                  <p className="text-sm font-unbounded font-bold text-white tracking-tight">
-                    STUDIO MASTER
-                  </p>
-                  <p className="text-[11px] font-mono text-zinc-400 mt-0.5">
-                    24-Bit / 96.0 kHz FLAC
-                  </p>
-                </div>
-                <div className="pt-2 border-t border-white/5">
-                  <span className="text-[10px] font-mono uppercase tracking-widest text-emerald-400">
-                    &bull; ZERO LATENCY STREAM
-                  </span>
-                </div>
-              </div>
-            </aside>
           </div>
         )}
 
-        {/* VIEW 2: ALBUM DETAIL VIEW (SLIDES TO SIDE & DISPLAYS TRACKS) */}
+        {/* VIEW 2: ALBUM DETAIL VIEW (SLIDES TO SIDE & DISPLAYS TRACKS SMOOTHLY) */}
         {(viewMode === 'album' || filteredSongs) && (
-          <div className="relative w-full h-full max-w-6xl mx-auto px-8 flex flex-col md:flex-row items-center justify-between gap-10 overflow-y-auto pt-4 pb-12">
+          <div className="relative w-full h-full max-w-6xl mx-auto px-8 flex flex-col md:flex-row items-center justify-between gap-10 overflow-y-auto pt-4 pb-12 animate-album-glide">
             {/* Left: Showcase Pedestal of Active Album with bottom-up fade */}
             <div className="w-full md:w-80 shrink-0 flex flex-col items-center md:items-start space-y-5 text-center md:text-left animate-slide-up">
               <button
@@ -761,8 +751,14 @@ export function App() {
             <span>{formatTime(duration)}</span>
           </div>
 
-          {/* Visualizer */}
-          <div className="hidden md:block w-full">
+          {/* Visualizer: Gently rises up when playing, and gently sinks down when paused */}
+          <div
+            className={`hidden md:flex items-center justify-center w-full transition-all duration-700 ease-out overflow-hidden ${
+              isPlaying
+                ? 'max-h-12 opacity-100 translate-y-0 mt-1'
+                : 'max-h-0 opacity-0 translate-y-3 pointer-events-none'
+            }`}
+          >
             <AudioVisualizer isPlaying={isPlaying} accentColor={currentSong.accentColor} />
           </div>
         </div>

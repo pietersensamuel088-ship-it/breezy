@@ -3,6 +3,7 @@ import { FEATURED_ALBUMS, ALL_SONGS } from './mockData';
 import { Album, Song } from './types';
 import { CircularCarousel, CarouselItem } from './components/CircularCarousel';
 import { CometDial } from './components/CometDial';
+import { OptionWheel } from './components/OptionWheel';
 import { AudioVisualizer } from './components/AudioEngine';
 import { MusicDownloaderModal } from './components/MusicDownloaderModal';
 import { SyncedLyricsModal } from './components/SyncedLyricsModal';
@@ -22,7 +23,9 @@ import {
   Pin,
   PinOff,
   X,
-  GripHorizontal
+  GripHorizontal,
+  History,
+  Music2
 } from 'lucide-react';
 
 export function App() {
@@ -35,6 +38,16 @@ export function App() {
   const [volume, setVolume] = useState<number>(0.85);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Recently Listened History Queue for OptionWheel
+  const [historySongs, setHistorySongs] = useState<Song[]>([
+    FEATURED_ALBUMS[0].songs[0], // Under the Influence
+    FEATURED_ALBUMS[0].songs[1], // Call Me Every Day
+    FEATURED_ALBUMS[1].songs[0], // Knife Talk
+    FEATURED_ALBUMS[2].songs[0], // No Guidance
+    FEATURED_ALBUMS[3].songs[0], // Rich Flex
+    FEATURED_ALBUMS[4].songs[0], // Sensational
+  ]);
 
   // Draggable & Pinnable Volume State
   const [isVolumeOpen, setIsVolumeOpen] = useState<boolean>(false);
@@ -62,6 +75,9 @@ export function App() {
     subtitle: `${alb.artist} • ${alb.year}`,
     albumId: alb.id
   }));
+
+  // Format labels for OptionWheel: "Song Title — Album"
+  const historyLabels = historySongs.map((s) => `${s.title} — ${s.album}`);
 
   // Playback volume handling
   useEffect(() => {
@@ -108,6 +124,18 @@ export function App() {
     setCurrentTime(0);
     setDuration(song.duration);
     setIsPlaying(true);
+
+    // Add to history list at the top (avoid duplicates)
+    setHistorySongs((prev) => {
+      const filtered = prev.filter((s) => s.id !== song.id);
+      return [song, ...filtered];
+    });
+
+    // Also match the carousel to the song's album
+    const matchingAlbumIdx = albums.findIndex((a) => a.title === song.album || a.id.includes(song.album.toLowerCase()));
+    if (matchingAlbumIdx !== -1) {
+      setSelectedAlbumIndex(matchingAlbumIdx);
+    }
 
     audioSynth.startRhythm(song.genre);
     if (audioRef.current) {
@@ -156,7 +184,6 @@ export function App() {
     }
   };
 
-  // Dragging the Volume HUD
   const handleDragStart = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDraggingVolume(true);
@@ -271,68 +298,130 @@ export function App() {
 
       {/* MAIN SCREEN STAGE */}
       <main className="relative z-10 flex-1 overflow-hidden flex flex-col justify-center pb-24">
-        {/* VIEW 1: HOME PAGE — PURE FULLSCREEN CAROUSEL WITH ZERO JANK */}
+        {/* VIEW 1: HOME PAGE — PURE CAROUSEL + OPTIONWHEEL ON THE SIDE */}
         {viewMode === 'home' && !filteredSongs && (
-          <div className="relative w-full h-full flex flex-col items-center justify-center select-none animate-fadeIn">
-            {/* Elevated Table Pedestal Under-Shadow */}
-            <div
-              className="absolute bottom-16 left-1/2 -translate-x-1/2 w-[720px] max-w-[85vw] h-12 rounded-full blur-2xl opacity-60 pointer-events-none transition-colors duration-700"
-              style={{
-                backgroundColor: '#000000',
-                boxShadow: `0 40px 100px 30px rgba(0,0,0,0.98), 0 0 50px 10px ${selectedAlbum.accentColor}20`
-              }}
-            />
+          <div className="relative w-full h-full flex items-center justify-between px-6 lg:px-12 select-none animate-fadeIn">
+            {/* LEFT SIDE: REACT BITS OPTIONWHEEL (RECENT LISTENING HISTORY) */}
+            <aside className="hidden lg:flex flex-col justify-center w-72 h-[480px] z-30 pointer-events-auto">
+              <div className="flex items-center gap-2 px-6 mb-3 text-zinc-400 font-mono text-[10px] tracking-[0.2em] uppercase">
+                <History className="w-3.5 h-3.5 text-luxury-gold" />
+                <span>Last Listened</span>
+              </div>
 
-            {/* Top Spotlight Fixture & Cone */}
-            <div
-              className="absolute top-2 left-1/2 -translate-x-1/2 w-52 h-2 rounded-full blur-md opacity-80 z-20 pointer-events-none transition-colors duration-700"
-              style={{
-                backgroundColor: selectedAlbum.accentColor,
-                boxShadow: `0 0 70px 20px ${selectedAlbum.accentColor}`
-              }}
-            />
+              <div className="w-full h-[400px] relative">
+                <OptionWheel
+                  items={historyLabels}
+                  defaultSelected={0}
+                  side="left"
+                  textColor="rgba(255, 255, 255, 0.28)"
+                  activeColor={currentSong.accentColor || '#ffffff'}
+                  fontSize={1.05}
+                  spacing={2.2}
+                  curve={1.25}
+                  tilt={8.5}
+                  blur={1.2}
+                  fade={0.32}
+                  smoothing={240}
+                  inset={24}
+                  draggable={true}
+                  onSelect={(index) => {
+                    const selected = historySongs[index];
+                    if (selected) playSong(selected);
+                  }}
+                  className="w-full h-full"
+                />
+              </div>
 
-            {/* The Big, Beautiful React Bits CircularCarousel */}
-            <div className="w-full h-[580px] max-h-[75vh] flex items-center justify-center">
-              <CircularCarousel
-                items={carouselItems}
-                preset="cylinder"
-                intro="assemble"
-                cardWidth={290}
-                aspectRatio={1}
-                speed={8}
-                captions={true}
-                gap={50}
-                tilt={-4}
-                perspective={2200}
-                momentum={0.65}
-                snap={true}
-                parallax={0.35}
-                stretch={0.4}
-                fadeColor="#050608"
-                cornerRadius={28}
-                onChange={(index) => {
-                  setSelectedAlbumIndex(index);
-                  if (albums[index] && albums[index].songs.length > 0) {
-                    setCurrentSong(albums[index].songs[0]);
-                  }
+              <div className="px-6 mt-2 text-[9px] font-mono text-zinc-600 tracking-wider">
+                Scroll &bull; Click track to play
+              </div>
+            </aside>
+
+            {/* CENTER: THE 3D CIRCULAR CAROUSEL */}
+            <div className="relative flex-1 h-full flex flex-col items-center justify-center">
+              {/* Elevated Table Pedestal Under-Shadow */}
+              <div
+                className="absolute bottom-16 left-1/2 -translate-x-1/2 w-[680px] max-w-[70vw] h-12 rounded-full blur-2xl opacity-60 pointer-events-none transition-colors duration-700"
+                style={{
+                  backgroundColor: '#000000',
+                  boxShadow: `0 40px 100px 30px rgba(0,0,0,0.98), 0 0 50px 10px ${selectedAlbum.accentColor}20`
                 }}
-                onItemClick={(item, index) => {
-                  setSelectedAlbumIndex(index);
-                  setViewMode('album');
-                }}
-                className="w-full h-full"
               />
+
+              {/* Top Spotlight Fixture & Cone */}
+              <div
+                className="absolute top-2 left-1/2 -translate-x-1/2 w-52 h-2 rounded-full blur-md opacity-80 z-20 pointer-events-none transition-colors duration-700"
+                style={{
+                  backgroundColor: selectedAlbum.accentColor,
+                  boxShadow: `0 0 70px 20px ${selectedAlbum.accentColor}`
+                }}
+              />
+
+              {/* The Big React Bits CircularCarousel */}
+              <div className="w-full h-[580px] max-h-[75vh] flex items-center justify-center">
+                <CircularCarousel
+                  items={carouselItems}
+                  preset="cylinder"
+                  intro="assemble"
+                  cardWidth={290}
+                  aspectRatio={1}
+                  speed={8}
+                  captions={true}
+                  gap={50}
+                  tilt={-4}
+                  perspective={2200}
+                  momentum={0.65}
+                  snap={true}
+                  parallax={0.35}
+                  stretch={0.4}
+                  fadeColor="#050608"
+                  cornerRadius={28}
+                  onChange={(index) => {
+                    setSelectedAlbumIndex(index);
+                    if (albums[index] && albums[index].songs.length > 0) {
+                      setCurrentSong(albums[index].songs[0]);
+                    }
+                  }}
+                  onItemClick={(item, index) => {
+                    setSelectedAlbumIndex(index);
+                    setViewMode('album');
+                  }}
+                  className="w-full h-full"
+                />
+              </div>
+
+              {/* Interactive Invitation Badge */}
+              <div
+                onClick={() => setViewMode('album')}
+                className="group cursor-pointer inline-flex items-center gap-2.5 px-5 py-2 rounded-full bg-white/[0.04] hover:bg-white/[0.1] border border-white/10 hover:border-white/25 backdrop-blur-md text-xs font-mono tracking-wider text-zinc-300 hover:text-white transition-all duration-300 hover:scale-105 active:scale-95 z-30 -mt-2"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-luxury-gold group-hover:rotate-12 transition-transform" />
+                <span>CLICK ALBUM TO EXPLORE TRACKS</span>
+              </div>
             </div>
 
-            {/* Interactive Invitation Badge */}
-            <div
-              onClick={() => setViewMode('album')}
-              className="group cursor-pointer inline-flex items-center gap-2.5 px-5 py-2 rounded-full bg-white/[0.04] hover:bg-white/[0.1] border border-white/10 hover:border-white/25 backdrop-blur-md text-xs font-mono tracking-wider text-zinc-300 hover:text-white transition-all duration-300 hover:scale-105 active:scale-95 z-30 -mt-2"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-luxury-gold group-hover:rotate-12 transition-transform" />
-              <span>CLICK ALBUM TO EXPLORE TRACKS</span>
-            </div>
+            {/* RIGHT SIDE: SYMMETRICAL SPACER / QUICK STATS */}
+            <aside className="hidden lg:flex flex-col justify-center items-end w-72 h-[480px] z-30 pointer-events-none pr-4">
+              <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/5 backdrop-blur-md text-right space-y-3 pointer-events-auto">
+                <div className="flex items-center justify-end gap-2 text-xs font-mono text-zinc-400">
+                  <span>AUDIO FIDELITY</span>
+                  <Music2 className="w-3.5 h-3.5 text-luxury-gold" />
+                </div>
+                <div>
+                  <p className="text-sm font-unbounded font-bold text-white tracking-tight">
+                    STUDIO MASTER
+                  </p>
+                  <p className="text-[11px] font-mono text-zinc-400 mt-0.5">
+                    24-Bit / 96.0 kHz FLAC
+                  </p>
+                </div>
+                <div className="pt-2 border-t border-white/5">
+                  <span className="text-[10px] font-mono uppercase tracking-widest text-emerald-400">
+                    &bull; ZERO LATENCY STREAM
+                  </span>
+                </div>
+              </div>
+            </aside>
           </div>
         )}
 

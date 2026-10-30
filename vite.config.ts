@@ -207,12 +207,12 @@ function breezyAudioStreamerPlugin(): Plugin {
           fs.mkdirSync(songsDir, { recursive: true });
         }
 
-        const cleanArtist = artist.replace(/["'$`\\]/g, '');
-        const cleanTitle = title.replace(/["'$`\\]/g, '');
+        const cleanArtist = artist.replace(/[/\\"'`$]/g, ' ').replace(/\s+/g, ' ').trim();
+        const cleanTitle = title.replace(/[/\\"'`$]/g, ' ').replace(/\s+/g, ' ').trim();
         const cleanName = `${artist}_${title}`.replace(/[^a-zA-Z0-9_\-\.]/g, '_').toLowerCase();
         const targetMp3 = path.resolve(songsDir, `${cleanName}.mp3`);
         const targetTemp = path.resolve(songsDir, `${cleanName}.tmp`);
-        const query = `"${cleanArtist}" "${cleanTitle}" official audio`;
+        const query = `"${cleanArtist}" "${cleanTitle}" Topic`;
 
         console.log(`[Breezy Stream] Real-time HTTP chunked pipe: "${artist} - ${title}"...`);
 

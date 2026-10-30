@@ -83,7 +83,7 @@ export async function getOrDownloadTrack(title, artist) {
   console.log(`[Proxmox Downloader] Fast native stream download: "${artist} - ${title}"...`);
   const cleanArtist = artist.replace(/["'$`\\]/g, '');
   const cleanTitle = title.replace(/["'$`\\]/g, '');
-  const query = `${cleanArtist} ${cleanTitle} official audio`;
+  const query = `"${cleanArtist}" "${cleanTitle}" official audio`;
 
   const downloadPromise = new Promise((resolve) => {
     // Fast native audio download without slow ffmpeg transcoding delay (128-160k AAC for instant buffering)

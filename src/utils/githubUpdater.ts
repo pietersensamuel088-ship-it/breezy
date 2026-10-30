@@ -1,5 +1,5 @@
 // Current local build commit hash (updated on build/commit)
-export const CURRENT_COMMIT_SHA = '4f44a07';
+export const CURRENT_COMMIT_SHA = '7fa61b1';
 export const GITHUB_REPO = 'pietersensamuel088-ship-it/breezy';
 
 export interface GitHubCommitInfo {

@@ -54,34 +54,61 @@ function findLocalSong(title: string, artist: string): string | null {
   const songsDir = path.resolve(__dirname, 'nicsongs');
   if (!fs.existsSync(songsDir)) return null;
 
-  const cleanArtist = artist.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const cleanTitle = title.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const baseTitle = title.replace(/\s*[\(\[](feat|ft|with)[\s\S]*?[\)\]]/gi, '').trim();
+  const baseArtist = artist.replace(/\s*(&|feat\.|ft\.|and).*$/i, '').trim();
 
-  // 1. Direct specific file check: e.g. "jhene_aiko_guidance.mp3"
-  const sanitizedName = `${artist}_${title}`.replace(/[^a-zA-Z0-9_\-\.]/g, '_').toLowerCase();
-  for (const ext of ['.mp3', '.flac', '.m4a', '.wav']) {
-    const directPath = path.join(songsDir, `${sanitizedName}${ext}`);
-    if (fs.existsSync(directPath)) return directPath;
+  const cleanArtist = artist.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const cleanBaseArtist = baseArtist.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const cleanTitle = title.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const cleanBaseTitle = baseTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  // 1. Direct specific file checks in root of nicsongs
+  const candidates = [
+    `${artist}_${title}`,
+    `${artist}_${baseTitle}`,
+    `${baseArtist}_${title}`,
+    `${baseArtist}_${baseTitle}`,
+  ];
+
+  for (const c of candidates) {
+    const sanitizedName = c.replace(/[^a-zA-Z0-9_\-\.]/g, '_').toLowerCase();
+    for (const ext of ['.mp3', '.flac', '.m4a', '.wav']) {
+      const directPath = path.join(songsDir, `${sanitizedName}${ext}`);
+      if (fs.existsSync(directPath)) return directPath;
+    }
   }
 
-  // 2. Scan recursively requiring BOTH artist and title to match
-  function scan(dir: string): string | null {
+  // 2. Scan direct root files first (verified downloads)
+  const rootEntries = fs.readdirSync(songsDir, { withFileTypes: true });
+  for (const entry of rootEntries) {
+    if (entry.isFile()) {
+      const lower = entry.name.toLowerCase();
+      if (lower.endsWith('.mp3') || lower.endsWith('.flac') || lower.endsWith('.m4a') || lower.endsWith('.wav')) {
+        const cleanName = lower.replace(/[^a-z0-9]/g, '');
+        const artistMatch = cleanName.includes(cleanArtist) || cleanName.includes(cleanBaseArtist);
+        const titleMatch = cleanName.includes(cleanTitle) || cleanName.includes(cleanBaseTitle);
+        if (artistMatch && titleMatch) {
+          return path.join(songsDir, entry.name);
+        }
+      }
+    }
+  }
+
+  // 3. Scan subdirectories (excluding any known corrupt/mislabeled rip directories)
+  function scanSubdirs(dir: string): string | null {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        const found = scan(fullPath);
+        if (entry.name.includes('Indigo (Extended)')) continue;
+        const found = scanSubdirs(fullPath);
         if (found) return found;
       } else if (entry.isFile()) {
         const lower = entry.name.toLowerCase();
         if (lower.endsWith('.mp3') || lower.endsWith('.flac') || lower.endsWith('.m4a') || lower.endsWith('.wav')) {
           const cleanName = lower.replace(/[^a-z0-9]/g, '');
-          
-          // Require ARTIST to match if artist has more than 2 alphanumeric chars
-          const artistMatch = cleanArtist.length < 3 || cleanName.includes(cleanArtist);
-          // Require EXACT full TITLE string to match
-          const titleMatch = cleanName.includes(cleanTitle);
-
+          const artistMatch = cleanName.includes(cleanArtist) || cleanName.includes(cleanBaseArtist);
+          const titleMatch = cleanName.includes(cleanTitle) || cleanName.includes(cleanBaseTitle);
           if (artistMatch && titleMatch) {
             return fullPath;
           }
@@ -91,7 +118,7 @@ function findLocalSong(title: string, artist: string): string | null {
     return null;
   }
 
-  return scan(songsDir);
+  return scanSubdirs(songsDir);
 }
 
 function serveLocalRange(filePath: string, req: any, res: any) {

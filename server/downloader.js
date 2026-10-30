@@ -19,29 +19,72 @@ function sanitizeFilename(str) {
  */
 function findExistingTrack(dir, title, artist) {
   if (!fs.existsSync(dir)) return null;
-  const cleanTitle = title.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const cleanArtist = artist.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-  try {
-    const entries = fs.readdirSync(dir, { recursive: true, withFileTypes: true });
+  const baseTitle = title.replace(/\s*[\(\[](feat|ft|with)[\s\S]*?[\)\]]/gi, '').trim();
+  const baseArtist = artist.replace(/\s*(&|feat\.|ft\.|and).*$/i, '').trim();
+
+  const cleanArtist = artist.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const cleanBaseArtist = baseArtist.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const cleanTitle = title.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const cleanBaseTitle = baseTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  // 1. Direct specific file checks in root of dir
+  const candidates = [
+    `${artist}_${title}`,
+    `${artist}_${baseTitle}`,
+    `${baseArtist}_${title}`,
+    `${baseArtist}_${baseTitle}`,
+  ];
+
+  for (const c of candidates) {
+    const sanitizedName = c.replace(/[^a-zA-Z0-9_\-\.]/g, '_').toLowerCase();
+    for (const ext of ['.mp3', '.flac', '.m4a', '.wav']) {
+      const directPath = path.join(dir, `${sanitizedName}${ext}`);
+      if (fs.existsSync(directPath)) return directPath;
+    }
+  }
+
+  // 2. Scan direct root files first (verified downloads)
+  const rootEntries = fs.readdirSync(dir, { withFileTypes: true });
+  for (const entry of rootEntries) {
+    if (entry.isFile()) {
+      const lower = entry.name.toLowerCase();
+      if (lower.endsWith('.mp3') || lower.endsWith('.flac') || lower.endsWith('.m4a') || lower.endsWith('.wav')) {
+        const cleanName = lower.replace(/[^a-z0-9]/g, '');
+        const artistMatch = cleanName.includes(cleanArtist) || cleanName.includes(cleanBaseArtist);
+        const titleMatch = cleanName.includes(cleanTitle) || cleanName.includes(cleanBaseTitle);
+        if (artistMatch && titleMatch) {
+          return path.join(dir, entry.name);
+        }
+      }
+    }
+  }
+
+  // 3. Scan subdirectories (skipping known corrupt rip folders)
+  function scanSubdirs(subDir) {
+    const entries = fs.readdirSync(subDir, { withFileTypes: true });
     for (const entry of entries) {
-      if (entry.isFile()) {
-        const nameLower = entry.name.toLowerCase();
-        if (nameLower.endsWith('.mp3') || nameLower.endsWith('.flac') || nameLower.endsWith('.m4a') || nameLower.endsWith('.wav')) {
-          const cleanName = nameLower.replace(/[^a-z0-9]/g, '');
-          const artistMatch = cleanArtist.length < 3 || cleanName.includes(cleanArtist);
-          const titleMatch = cleanName.includes(cleanTitle);
+      const fullPath = path.join(subDir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name.includes('Indigo (Extended)')) continue;
+        const found = scanSubdirs(fullPath);
+        if (found) return found;
+      } else if (entry.isFile()) {
+        const lower = entry.name.toLowerCase();
+        if (lower.endsWith('.mp3') || lower.endsWith('.flac') || lower.endsWith('.m4a') || lower.endsWith('.wav')) {
+          const cleanName = lower.replace(/[^a-z0-9]/g, '');
+          const artistMatch = cleanArtist.length < 3 || cleanName.includes(cleanArtist) || cleanName.includes(cleanBaseArtist);
+          const titleMatch = cleanName.includes(cleanTitle) || cleanName.includes(cleanBaseTitle);
           if (artistMatch && titleMatch) {
-            const parent = entry.parentPath || dir;
-            return path.join(parent, entry.name);
+            return fullPath;
           }
         }
       }
     }
-  } catch (err) {
-    console.warn('[Finder Note]', err.message);
+    return null;
   }
-  return null;
+
+  return scanSubdirs(dir);
 }
 
 const inFlightDownloads = new Map();

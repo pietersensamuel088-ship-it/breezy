@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Sparkles, RefreshCw, X, ArrowUpCircle } from 'lucide-react';
-import { GitHubCommitInfo } from '../utils/githubUpdater';
+import { GitHubCommitInfo, dismissUpdate } from '../utils/githubUpdater';
 
 interface UpdateNotificationBannerProps {
   hasUpdate: boolean;
@@ -12,8 +12,8 @@ declare global {
   interface Window {
     electronAPI?: {
       isElectron?: boolean;
-      pullUpdate: () => Promise<{ success: boolean; output?: string; error?: string }>;
-      autoUpdateAndRestart: () => Promise<{ success: boolean; output?: string; error?: string }>;
+      pullUpdate: () => Promise<{ success: boolean; output?: string; error?: string; isPackaged?: boolean }>;
+      autoUpdateAndRestart: () => Promise<{ success: boolean; output?: string; error?: string; isPackaged?: boolean }>;
     };
   }
 }
@@ -28,26 +28,49 @@ export function UpdateNotificationBanner({
 
   if (!hasUpdate) return null;
 
+  const handleDismiss = () => {
+    if (latestCommit?.sha) {
+      dismissUpdate(latestCommit.sha);
+    }
+    onDismiss();
+  };
+
   const handle1ClickUpdate = async () => {
     setIsUpdating(true);
-    setStatusMessage('Pulling newest version from GitHub...');
+    setStatusMessage('Applying update...');
+
+    // Permanently record that user acted on this commit
+    if (latestCommit?.sha) {
+      dismissUpdate(latestCommit.sha);
+    }
 
     try {
       if (window.electronAPI?.autoUpdateAndRestart) {
-        // Native Electron Desktop Mode: Pulls and restarts with 0 commands!
         const res = await window.electronAPI.autoUpdateAndRestart();
+        if (res.isPackaged) {
+          setStatusMessage('Updated! Ready.');
+          setTimeout(() => {
+            onDismiss();
+          }, 1200);
+          return;
+        }
         if (!res.success) {
           setStatusMessage('Refreshing...');
-          window.location.reload();
+          setTimeout(() => {
+            onDismiss();
+            window.location.reload();
+          }, 800);
+          return;
         }
       } else {
-        // Web / Standalone Browser Mode: Reloads with cache bust
-        setStatusMessage('Applying update...');
+        setStatusMessage('Refreshed to latest!');
         setTimeout(() => {
+          onDismiss();
           window.location.reload();
-        }, 1200);
+        }, 1000);
       }
     } catch {
+      onDismiss();
       window.location.reload();
     }
   };
@@ -91,7 +114,7 @@ export function UpdateNotificationBanner({
           </button>
 
           <button
-            onClick={onDismiss}
+            onClick={handleDismiss}
             className="p-1.5 rounded-lg text-zinc-500 hover:text-white transition-colors cursor-pointer"
             title="Dismiss for now"
           >

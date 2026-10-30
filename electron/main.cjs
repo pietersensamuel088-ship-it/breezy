@@ -70,6 +70,10 @@ function createWindow() {
 
 // GitHub 1-Click Auto-Updater & Restart IPC Trigger
 ipcMain.handle('git-pull-update', async () => {
+  if (app.isPackaged) {
+    shell.openExternal('https://github.com/pietersensamuel088-ship-it/breezy');
+    return { success: true, isPackaged: true, output: 'Opened GitHub' };
+  }
   return new Promise((resolve) => {
     exec('git pull origin main', { cwd: path.join(__dirname, '..') }, (error, stdout, stderr) => {
       if (error) {
@@ -82,6 +86,10 @@ ipcMain.handle('git-pull-update', async () => {
 });
 
 ipcMain.handle('app-update-and-restart', async () => {
+  if (app.isPackaged) {
+    shell.openExternal('https://github.com/pietersensamuel088-ship-it/breezy');
+    return { success: true, isPackaged: true, output: 'Opened GitHub' };
+  }
   return new Promise((resolve) => {
     exec('git pull origin main && npm run build', { cwd: path.join(__dirname, '..') }, (error, stdout, stderr) => {
       if (error) {

@@ -2,8 +2,13 @@ import { defineConfig, Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import fs from 'fs';
 import path from 'path';
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 import { Readable } from 'stream';
+
+let currentGitSha = '3fa3f5c';
+try {
+  currentGitSha = execSync('git rev-parse HEAD').toString().trim();
+} catch {}
 
 const MAX_LRU_CACHE_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
 
@@ -288,6 +293,9 @@ function breezyAudioStreamerPlugin(): Plugin {
 // https://vite.dev/config/
 export default defineConfig({
   base: './',
+  define: {
+    __APP_COMMIT_SHA__: JSON.stringify(currentGitSha),
+  },
   plugins: [react(), breezyAudioStreamerPlugin()],
   server: {
     port: 5173,

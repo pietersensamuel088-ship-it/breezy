@@ -1,5 +1,11 @@
-// Current local build commit hash (updated on build/commit)
-export const CURRENT_COMMIT_SHA = 'e18b367';
+// Dynamic build commit injected by Vite at compile time, or fallback to latest known
+declare const __APP_COMMIT_SHA__: string | undefined;
+
+export const CURRENT_COMMIT_SHA =
+  typeof __APP_COMMIT_SHA__ !== 'undefined' && __APP_COMMIT_SHA__
+    ? __APP_COMMIT_SHA__.substring(0, 7)
+    : '3fa3f5c';
+
 export const GITHUB_REPO = 'pietersensamuel088-ship-it/breezy';
 
 export interface GitHubCommitInfo {
@@ -8,6 +14,34 @@ export interface GitHubCommitInfo {
   message: string;
   date: string;
   author: string;
+}
+
+/**
+ * Permanently dismisses or acknowledges an update for a specific commit SHA
+ */
+export function dismissUpdate(sha: string) {
+  try {
+    if (typeof localStorage !== 'undefined' && sha) {
+      localStorage.setItem('breezy_dismissed_update_sha', sha);
+    }
+  } catch {}
+}
+
+/**
+ * Checks if a specific commit SHA has already been dismissed or acknowledged
+ */
+export function isUpdateDismissed(sha: string): boolean {
+  try {
+    if (typeof localStorage === 'undefined' || !sha) return false;
+    const dismissed = localStorage.getItem('breezy_dismissed_update_sha');
+    if (!dismissed) return false;
+    return (
+      sha.toLowerCase().startsWith(dismissed.toLowerCase()) ||
+      dismissed.toLowerCase().startsWith(sha.toLowerCase())
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -48,8 +82,15 @@ export async function checkForGitHubUpdate(): Promise<{
       author: data.commit.author?.name || 'Developer',
     };
 
-    // If remote commit SHA is different from current local build SHA, an update is ready!
-    const hasUpdate = !remoteSha.startsWith(CURRENT_COMMIT_SHA);
+    // If user already dismissed or updated this commit, don't show prompt!
+    const isDismissed = isUpdateDismissed(remoteSha) || isUpdateDismissed(shortSha);
+
+    // If remote commit SHA is different from current local build SHA AND not dismissed:
+    const isNewer =
+      !remoteSha.toLowerCase().startsWith(CURRENT_COMMIT_SHA.toLowerCase()) &&
+      !CURRENT_COMMIT_SHA.toLowerCase().startsWith(shortSha.toLowerCase());
+
+    const hasUpdate = isNewer && !isDismissed;
 
     return {
       hasUpdate,

@@ -7,6 +7,8 @@ import { LineSidebar } from './components/LineSidebar';
 import { AudioVisualizer } from './components/AudioEngine';
 import { MusicDownloaderModal } from './components/MusicDownloaderModal';
 import { SyncedLyricsModal } from './components/SyncedLyricsModal';
+import { WelcomeOverlay } from './components/WelcomeOverlay';
+import { SongDetailModal } from './components/SongDetailModal';
 import { audioSynth } from './utils/audioSynthesizer';
 import {
   Play,
@@ -25,7 +27,9 @@ import {
   X,
   GripHorizontal,
   History,
-  Music2
+  Music2,
+  Maximize2,
+  User
 } from 'lucide-react';
 
 export function App() {
@@ -38,6 +42,13 @@ export function App() {
   const [volume, setVolume] = useState<number>(0.85);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Welcome Sign-In State (runs on every refresh as requested)
+  const [isWelcomeOpen, setIsWelcomeOpen] = useState<boolean>(true);
+  const [currentUser, setCurrentUser] = useState<string>('Guest');
+
+  // Song Detail View Modal with React Bits HoloCard
+  const [isSongDetailOpen, setIsSongDetailOpen] = useState<boolean>(false);
 
   // Recently Listened History Queue for LineSidebar (Maintains stable positions while playing)
   const [historySongs, setHistorySongs] = useState<Song[]>([
@@ -297,11 +308,22 @@ export function App() {
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          {currentUser && currentUser !== 'Guest' && (
+            <button
+              onClick={() => setIsWelcomeOpen(true)}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-xs font-mono text-zinc-300 hover:text-white transition-all cursor-pointer"
+              title="Click to replay Apple-style Welcome screen"
+            >
+              <User className="w-3.5 h-3.5 text-zinc-400" />
+              <span>{currentUser}</span>
+            </button>
+          )}
+
           {viewMode === 'album' && (
             <button
               onClick={() => setViewMode('home')}
-              className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-mono text-zinc-300 hover:text-white transition-all hover:scale-105 active:scale-95"
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-mono text-zinc-300 hover:text-white transition-all hover:scale-105 active:scale-95 cursor-pointer"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>CAROUSEL</span>
@@ -310,7 +332,7 @@ export function App() {
 
           <button
             onClick={() => setIsDownloaderOpen(true)}
-            className="group flex items-center gap-2 px-4 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.1] border border-white/10 text-xs font-mono text-zinc-300 hover:text-white transition-all duration-300 hover:scale-105 active:scale-95"
+            className="group flex items-center gap-2 px-4 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.1] border border-white/10 text-xs font-mono text-zinc-300 hover:text-white transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer"
           >
             <Download className="w-3.5 h-3.5 text-white group-hover:text-luxury-blue transition-colors" />
             <span>GET MUSIC</span>
@@ -435,12 +457,12 @@ export function App() {
 
         {/* VIEW 2: ALBUM DETAIL VIEW (SLIDES TO SIDE & DISPLAYS TRACKS) */}
         {(viewMode === 'album' || filteredSongs) && (
-          <div className="relative w-full h-full max-w-6xl mx-auto px-8 flex flex-col md:flex-row items-center justify-between gap-10 overflow-y-auto pt-4 pb-12 animate-fadeIn">
-            {/* Left: Showcase Pedestal of Active Album */}
-            <div className="w-full md:w-80 shrink-0 flex flex-col items-center md:items-start space-y-5 text-center md:text-left">
+          <div className="relative w-full h-full max-w-6xl mx-auto px-8 flex flex-col md:flex-row items-center justify-between gap-10 overflow-y-auto pt-4 pb-12">
+            {/* Left: Showcase Pedestal of Active Album with bottom-up fade */}
+            <div className="w-full md:w-80 shrink-0 flex flex-col items-center md:items-start space-y-5 text-center md:text-left animate-slide-up">
               <button
                 onClick={() => setViewMode('home')}
-                className="inline-flex items-center gap-2 text-xs font-mono text-zinc-400 hover:text-white transition-colors py-1"
+                className="inline-flex items-center gap-2 text-xs font-mono text-zinc-400 hover:text-white transition-colors py-1 cursor-pointer"
               >
                 <ArrowLeft className="w-4 h-4" />
                 <span>Return to Exhibition</span>
@@ -464,7 +486,7 @@ export function App() {
                       playSong(selectedAlbum.songs[0]);
                     }
                   }}
-                  className="absolute inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                  className="absolute inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 cursor-pointer"
                 >
                   <div className="w-16 h-16 rounded-full bg-white text-black flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-transform">
                     <Play className="w-7 h-7 fill-black ml-1" />
@@ -485,9 +507,9 @@ export function App() {
               </div>
             </div>
 
-            {/* Right: Smooth Sliding Tracklist */}
+            {/* Right: Smooth Sliding Tracklist - Cascades from bottom-up */}
             <div className="flex-1 w-full max-h-[68vh] overflow-y-auto space-y-2 pr-2">
-              <div className="flex items-center justify-between border-b border-white/[0.08] pb-3 mb-3">
+              <div className="flex items-center justify-between border-b border-white/[0.08] pb-3 mb-3 animate-slide-up">
                 <span className="text-xs font-mono uppercase tracking-[0.2em] text-zinc-400">
                   {filteredSongs ? `Search Results (${filteredSongs.length})` : 'Master Studio Tracks'}
                 </span>
@@ -502,7 +524,8 @@ export function App() {
                   <div
                     key={song.id}
                     onClick={() => playSong(song)}
-                    className={`group relative flex items-center justify-between px-5 py-4 rounded-2xl cursor-pointer transition-all duration-300 ${
+                    style={{ animationDelay: `${index * 45}ms` }}
+                    className={`group relative flex items-center justify-between px-5 py-4 rounded-2xl cursor-pointer transition-all duration-300 animate-slide-up ${
                       isCurrent
                         ? 'bg-white/10 border border-white/20 shadow-[0_10px_30px_rgba(0,0,0,0.6)] backdrop-blur-md'
                         : 'hover:bg-white/5 border border-transparent hover:border-white/5'
@@ -648,9 +671,13 @@ export function App() {
 
       {/* BOTTOM MASTER AUDIOPHILE PLAYER BAR */}
       <footer className="fixed bottom-0 left-0 right-0 z-40 h-22 px-8 flex items-center justify-between border-t border-white/[0.08] bg-[#07090e]/95 backdrop-blur-2xl">
-        {/* Left: Now Playing Info */}
-        <div className="flex items-center gap-4 w-1/4 min-w-[220px]">
-          <div className="relative w-14 h-14 rounded-xl overflow-hidden shadow-2xl border border-white/10 shrink-0">
+        {/* Left: Now Playing Info (Clickable to open HoloCard Master View) */}
+        <div
+          onClick={() => setIsSongDetailOpen(true)}
+          className="flex items-center gap-4 w-1/4 min-w-[220px] cursor-pointer group"
+          title="Click to view full master song stage with 3D Holographic Card"
+        >
+          <div className="relative w-14 h-14 rounded-xl overflow-hidden shadow-2xl border border-white/10 shrink-0 group-hover:scale-105 transition-transform duration-300">
             <img
               src={currentSong.coverUrl}
               alt=""
@@ -662,9 +689,12 @@ export function App() {
                 style={{ backgroundColor: currentSong.accentColor }}
               />
             )}
+            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+              <Maximize2 className="w-5 h-5 text-white drop-shadow-md" />
+            </div>
           </div>
           <div className="overflow-hidden">
-            <h4 className="text-sm font-bold text-white truncate tracking-wide">
+            <h4 className="text-sm font-bold text-white truncate tracking-wide group-hover:text-blue-300 transition-colors">
               {currentSong.title}
             </h4>
             <p className="text-xs text-zinc-400 truncate font-mono">{currentSong.artist}</p>
@@ -673,6 +703,7 @@ export function App() {
               <span className="text-[10px] text-zinc-400 font-mono tracking-wider">
                 {currentSong.bitrate}
               </span>
+              <span className="text-[9px] text-zinc-500 font-mono hidden sm:inline">&bull; Click to expand</span>
             </div>
           </div>
         </div>
@@ -779,7 +810,7 @@ export function App() {
         </div>
       </footer>
 
-      {/* MODALS */}
+      {/* MODALS & OVERLAYS */}
       <MusicDownloaderModal
         isOpen={isDownloaderOpen}
         onClose={() => setIsDownloaderOpen(false)}
@@ -790,6 +821,35 @@ export function App() {
         currentTime={currentTime}
         isOpen={isLyricsOpen}
         onClose={() => setIsLyricsOpen(false)}
+      />
+
+      {/* FULLSCREEN SONG DETAIL MASTER STAGE WITH HOLOCARD */}
+      <SongDetailModal
+        isOpen={isSongDetailOpen}
+        onClose={() => setIsSongDetailOpen(false)}
+        song={currentSong}
+        album={selectedAlbum}
+        isPlaying={isPlaying}
+        onTogglePlay={togglePlay}
+        onNext={handleNext}
+        onPrev={handlePrev}
+        currentTime={currentTime}
+        duration={duration}
+        onSeek={(val) => setCurrentTime(val)}
+        volume={volume}
+        onVolumeChange={(val) => {
+          setVolume(val);
+          setIsMuted(false);
+        }}
+      />
+
+      {/* APPLE-STYLE CURSIVE WELCOME SIGN-IN OVERLAY */}
+      <WelcomeOverlay
+        isOpen={isWelcomeOpen}
+        onComplete={(name) => {
+          setCurrentUser(name);
+          setIsWelcomeOpen(false);
+        }}
       />
     </div>
   );

@@ -95,3 +95,45 @@
   border-bottom: 1px solid #ffffff;
   box-shadow: 0 2px 15px -2px var(--glow-color);
 }
+
+/* Apple-style Cursive Font & Handwriting Glow */
+.font-cursive {
+  font-family: 'Alex Brush', 'Dancing Script', 'Caveat', cursive;
+}
+
+@keyframes cursiveDraw {
+  0% {
+    opacity: 0;
+    filter: blur(8px);
+    transform: scale(0.96) translateY(6px);
+  }
+  30% {
+    opacity: 0.7;
+    filter: blur(2px);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0px);
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-cursive-write {
+  animation: cursiveDraw 1.1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Bottom-Up Fade-In for Album Tracks & Content */
+@keyframes slideUpFade {
+  0% {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slideUpFade 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}

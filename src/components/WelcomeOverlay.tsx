@@ -1,34 +1,43 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Sparkles, ArrowRight, Music2 } from 'lucide-react';
+import { ArrowRight, Music2, UserCheck, Sparkles } from 'lucide-react';
 
 interface WelcomeOverlayProps {
   isOpen: boolean;
   onComplete: (username: string) => void;
+  savedUsername?: string;
 }
 
-export function WelcomeOverlay({ isOpen, onComplete }: WelcomeOverlayProps) {
+export function WelcomeOverlay({ isOpen, onComplete, savedUsername }: WelcomeOverlayProps) {
   const [stage, setStage] = useState<'input' | 'writing' | 'fading'>('input');
-  const [username, setUsername] = useState<string>('');
+  const [username, setUsername] = useState<string>(savedUsername || '');
   const [displayedText, setDisplayedText] = useState<string>('');
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
-      setStage('input');
-      setUsername('');
-      setDisplayedText('');
-      // Auto focus input
-      const timer = setTimeout(() => {
-        inputRef.current?.focus();
-      }, 200);
-      return () => clearTimeout(timer);
+      const stored = localStorage.getItem('breezy_username');
+      if (stored && stored.trim()) {
+        setUsername(stored.trim());
+        // For returning users, immediately trigger the Apple-style cursive "Welcome back, {name}"!
+        setStage('writing');
+      } else {
+        setStage('input');
+        setUsername('');
+        const timer = setTimeout(() => {
+          inputRef.current?.focus();
+        }, 150);
+        return () => clearTimeout(timer);
+      }
     }
   }, [isOpen]);
 
-  // Cursive handwriting typing & stroke reveal effect
+  // Apple-style Cursive Handwriting Effect
   useEffect(() => {
     if (stage === 'writing') {
-      const fullText = username.trim() ? `Welcome, ${username.trim()}` : 'Welcome';
+      const isReturning = Boolean(localStorage.getItem('breezy_username'));
+      const activeName = username.trim() || 'Guest';
+      const fullText = isReturning ? `Welcome back, ${activeName}` : `Welcome, ${activeName}`;
+
       let index = 0;
       setDisplayedText('');
 
@@ -37,15 +46,15 @@ export function WelcomeOverlay({ isOpen, onComplete }: WelcomeOverlayProps) {
         setDisplayedText(fullText.slice(0, index));
         if (index >= fullText.length) {
           clearInterval(interval);
-          // Pause to admire the glowing cursive handwriting like Apple setup
+          // Hold for 1.3 seconds so user enjoys the Apple-style calligraphy glow
           setTimeout(() => {
             setStage('fading');
             setTimeout(() => {
-              onComplete(username.trim() || 'Guest');
-            }, 750);
-          }, 1400);
+              onComplete(activeName);
+            }, 650);
+          }, 1300);
         }
-      }, 70); // Smooth fluid handwriting speed
+      }, 65); // Fluid handwriting tempo
 
       return () => clearInterval(interval);
     }
@@ -53,6 +62,9 @@ export function WelcomeOverlay({ isOpen, onComplete }: WelcomeOverlayProps) {
 
   const handleSignIn = (e: React.FormEvent) => {
     e.preventDefault();
+    const finalName = username.trim() || 'Guest';
+    localStorage.setItem('breezy_username', finalName);
+    setUsername(finalName);
     setStage('writing');
   };
 
@@ -65,22 +77,22 @@ export function WelcomeOverlay({ isOpen, onComplete }: WelcomeOverlayProps) {
       }`}
     >
       {/* Background Ambient Glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[500px] bg-blue-600/10 rounded-full blur-[160px] pointer-events-none" />
-      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-white/[0.04] rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[750px] h-[550px] bg-blue-600/10 rounded-full blur-[170px] pointer-events-none" />
+      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[420px] h-[420px] bg-white/[0.04] rounded-full blur-[130px] pointer-events-none" />
 
-      {/* STAGE 1: SIGN IN PROMPT */}
+      {/* STAGE 1: REAL PRODUCTION SIGN IN */}
       {stage === 'input' && (
-        <div className="relative z-10 w-full max-w-md mx-4 p-8 rounded-3xl bg-white/[0.02] border border-white/10 backdrop-blur-2xl shadow-[0_30px_90px_rgba(0,0,0,0.9)] flex flex-col items-center text-center animate-fadeIn">
+        <div className="relative z-10 w-full max-w-md mx-4 p-8 sm:p-10 rounded-3xl bg-white/[0.02] border border-white/10 backdrop-blur-2xl shadow-[0_30px_90px_rgba(0,0,0,0.95)] flex flex-col items-center text-center animate-fadeIn">
           {/* Logo Badge */}
-          <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-6 shadow-inner">
-            <Music2 className="w-7 h-7 text-white" />
+          <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-6 shadow-inner">
+            <Music2 className="w-8 h-8 text-white" />
           </div>
 
-          <h2 className="text-xl md:text-2xl font-unbounded font-black tracking-tight text-white mb-2">
-            BREEZY STUDIO
+          <h2 className="text-2xl font-unbounded font-black tracking-tight text-white mb-2">
+            BREEZY
           </h2>
           <p className="text-xs text-zinc-400 font-sans mb-8">
-            Master Audio Stream &bull; Enter your name to sign in
+            Master Audio Stream &bull; Enter your username to begin
           </p>
 
           <form onSubmit={handleSignIn} className="w-full flex flex-col items-center gap-4">
@@ -90,20 +102,21 @@ export function WelcomeOverlay({ isOpen, onComplete }: WelcomeOverlayProps) {
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Your username..."
-                className="w-full px-5 py-3.5 rounded-2xl bg-white/[0.04] border border-white/15 focus:border-white text-sm font-sans text-white placeholder-zinc-500 focus:outline-hidden transition-all duration-300 text-center shadow-inner"
+                placeholder="Enter username (e.g. Pieter)..."
+                required
+                className="w-full px-5 py-4 rounded-2xl bg-white/[0.04] border border-white/15 focus:border-white text-sm font-sans text-white placeholder-zinc-500 focus:outline-hidden transition-all duration-300 text-center shadow-inner"
               />
             </div>
 
             <button
               type="submit"
-              className="group w-full py-3.5 px-6 rounded-2xl bg-white text-black font-semibold text-xs tracking-wider uppercase font-mono flex items-center justify-center gap-2 hover:bg-zinc-200 active:scale-98 transition-all duration-200 shadow-[0_0_25px_rgba(255,255,255,0.25)]"
+              className="group w-full py-4 px-6 rounded-2xl bg-white text-black font-semibold text-xs tracking-wider uppercase font-mono flex items-center justify-center gap-2 hover:bg-zinc-200 active:scale-98 transition-all duration-200 shadow-[0_0_25px_rgba(255,255,255,0.25)] cursor-pointer"
             >
-              <span>Sign In</span>
+              <span>Launch Breezy</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </button>
             <span className="text-[10px] font-mono text-zinc-500 tracking-wider">
-              Press Enter ↵ to enter exhibition
+              Press Enter ↵ to enter your audio library
             </span>
           </form>
         </div>
@@ -112,14 +125,13 @@ export function WelcomeOverlay({ isOpen, onComplete }: WelcomeOverlayProps) {
       {/* STAGE 2: APPLE-STYLE CURSIVE HANDWRITING WRITE-OUT */}
       {(stage === 'writing' || stage === 'fading') && (
         <div className="relative z-10 flex flex-col items-center justify-center text-center px-6 select-none">
-          {/* Glowing Cursive Text */}
           <div className="relative">
             <h1
               className="font-cursive text-6xl sm:text-7xl md:text-8xl lg:text-9xl text-white tracking-wide transition-all duration-300"
               style={{
                 textShadow:
-                  '0 0 20px rgba(255,255,255,0.95), 0 0 45px rgba(255,255,255,0.7), 0 0 90px rgba(255,255,255,0.4)',
-                filter: 'drop-shadow(0 0 25px rgba(255,255,255,0.8))',
+                  '0 0 25px rgba(255,255,255,0.95), 0 0 50px rgba(255,255,255,0.7), 0 0 95px rgba(255,255,255,0.4)',
+                filter: 'drop-shadow(0 0 30px rgba(255,255,255,0.85))',
               }}
             >
               {displayedText}
@@ -130,10 +142,12 @@ export function WelcomeOverlay({ isOpen, onComplete }: WelcomeOverlayProps) {
           </div>
 
           <p className="mt-8 text-xs font-mono tracking-[0.3em] uppercase text-zinc-400 opacity-80 animate-pulse">
-            // INITIALIZING HIGH FIDELITY AUDIO STAGE
+            // MASTER AUDIO STAGE ONLINE
           </p>
         </div>
       )}
     </div>
   );
 }
+
+export default WelcomeOverlay;

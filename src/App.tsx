@@ -9,6 +9,8 @@ import { MusicDownloaderModal } from './components/MusicDownloaderModal';
 import { SyncedLyricsModal } from './components/SyncedLyricsModal';
 import { WelcomeOverlay } from './components/WelcomeOverlay';
 import { SongDetailModal } from './components/SongDetailModal';
+import { UserHubModal } from './components/UserHubModal';
+import { checkForGitHubUpdate } from './utils/githubUpdater';
 import { audioSynth } from './utils/audioSynthesizer';
 import {
   Play,
@@ -29,7 +31,8 @@ import {
   History,
   Music2,
   Maximize2,
-  User
+  User,
+  GitBranch
 } from 'lucide-react';
 
 export function App() {
@@ -43,9 +46,26 @@ export function App() {
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Welcome Sign-In State (runs on every refresh as requested)
+  // User Identity & Welcome State
+  const [currentUser, setCurrentUser] = useState<string>(
+    () => localStorage.getItem('breezy_username') || 'Guest'
+  );
   const [isWelcomeOpen, setIsWelcomeOpen] = useState<boolean>(true);
-  const [currentUser, setCurrentUser] = useState<string>('Guest');
+  const [isUserHubOpen, setIsUserHubOpen] = useState<boolean>(false);
+  const [hasGitHubUpdate, setHasGitHubUpdate] = useState<boolean>(false);
+
+  // Periodic Background GitHub Update Check (every 60s)
+  useEffect(() => {
+    const checkUpdate = async () => {
+      const res = await checkForGitHubUpdate();
+      if (res.hasUpdate) {
+        setHasGitHubUpdate(true);
+      }
+    };
+    checkUpdate();
+    const interval = setInterval(checkUpdate, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Song Detail View Modal with React Bits HoloCard
   const [isSongDetailOpen, setIsSongDetailOpen] = useState<boolean>(false);
@@ -322,14 +342,24 @@ export function App() {
 
         {/* Action Controls */}
         <div className="flex items-center gap-3">
-          {currentUser && currentUser !== 'Guest' && (
+          {currentUser && (
             <button
-              onClick={() => setIsWelcomeOpen(true)}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-xs font-mono text-zinc-300 hover:text-white transition-all cursor-pointer"
-              title="Click to replay Apple-style Welcome screen"
+              onClick={() => setIsUserHubOpen(true)}
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-xs font-mono text-zinc-200 hover:text-white transition-all cursor-pointer group"
+              title="Open User Profile & GitHub Updates"
             >
-              <User className="w-3.5 h-3.5 text-zinc-400" />
-              <span>{currentUser}</span>
+              <div className="relative">
+                <User className="w-3.5 h-3.5 text-zinc-400 group-hover:text-white transition-colors" />
+                {hasGitHubUpdate && (
+                  <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-blue-500 animate-ping" />
+                )}
+              </div>
+              <span className="font-semibold">{currentUser}</span>
+              {hasGitHubUpdate && (
+                <span className="px-1.5 py-0.5 rounded text-[9px] bg-blue-500/20 text-blue-400 border border-blue-500/40 font-bold animate-pulse">
+                  UPDATE
+                </span>
+              )}
             </button>
           )}
 
@@ -836,6 +866,18 @@ export function App() {
         onVolumeChange={(val) => {
           setVolume(val);
           setIsMuted(false);
+        }}
+      />
+
+      {/* USER PROFILE & GITHUB AUTO-UPDATER MODAL */}
+      <UserHubModal
+        isOpen={isUserHubOpen}
+        onClose={() => setIsUserHubOpen(false)}
+        currentUser={currentUser}
+        onSwitchUser={() => {
+          localStorage.removeItem('breezy_username');
+          setCurrentUser('Guest');
+          setIsWelcomeOpen(true);
         }}
       />
 

@@ -188,19 +188,18 @@ export function App() {
   const [lightningActive, setLightningActive] = useState<boolean>(false);
   const [lightningTrack, setLightningTrack] = useState<string>('');
 
-  // Prefetch a track to browser RAM audio buffer AND Proxmox/server disk immediately in the background
-  const prefetchSong = useCallback((song: Song) => {
-    try {
-      // 1. Preload directly into browser audio memory (HTML5 Audio object preloading)
-      const preloadAudio = new Audio();
-      preloadAudio.preload = 'auto';
-      preloadAudio.src = song.audioUrl;
-      preloadAudio.load();
+  // Track which song IDs have already been prefetched to avoid duplicate background requests
+  const prefetchedIdsRef = useRef<Set<string>>(new Set());
 
-      // 2. Pre-cache on the backend server
+  // Prefetch a track to Proxmox/server disk immediately in the background
+  const prefetchSong = useCallback((song: Song) => {
+    if (!song || !song.id || prefetchedIdsRef.current.has(song.id)) return;
+    prefetchedIdsRef.current.add(song.id);
+
+    try {
       fetch(song.audioUrl, {
         method: 'GET',
-        headers: { Range: 'bytes=0-1024' },
+        headers: { Range: 'bytes=0-2048' },
       }).catch(() => {});
     } catch {
       // silent
@@ -301,19 +300,16 @@ export function App() {
     playSong(nextSong);
   };
 
-  // Spotify-Tier Predictive Lookahead Engine: Automatically pre-downloads upcoming track
+  // Spotify-Tier Predictive Lookahead Engine: Prefetches next song ONCE when current song starts
   useEffect(() => {
-    if (!isPlaying || duration === 0) return;
-    const timeLeft = duration - currentTime;
-    if (timeLeft <= 25 || currentTime < 4) {
-      const upcoming = queue.length > 0
-        ? queue[0]
-        : selectedAlbum.songs[(selectedAlbum.songs.findIndex((s) => s.id === currentSong.id) + 1) % selectedAlbum.songs.length];
-      if (upcoming && upcoming.id !== currentSong.id) {
-        prefetchSong(upcoming);
-      }
+    if (!isPlaying) return;
+    const upcoming = queue.length > 0
+      ? queue[0]
+      : selectedAlbum.songs[(selectedAlbum.songs.findIndex((s) => s.id === currentSong.id) + 1) % selectedAlbum.songs.length];
+    if (upcoming && upcoming.id !== currentSong.id) {
+      prefetchSong(upcoming);
     }
-  }, [currentTime, duration, isPlaying, queue, selectedAlbum.songs, currentSong.id, prefetchSong]);
+  }, [currentSong.id, queue, isPlaying, selectedAlbum.songs, prefetchSong]);
 
   const handlePrev = () => {
     const currentIndex = selectedAlbum.songs.findIndex(s => s.id === currentSong.id);

@@ -43,6 +43,8 @@ function findExistingTrack(dir, title, artist) {
   return null;
 }
 
+const inFlightDownloads = new Map();
+
 /**
  * Autonomously fetches and saves FULL master tracks directly on Proxmox disk (NO 30-second previews)
  */
@@ -50,6 +52,7 @@ export async function getOrDownloadTrack(title, artist) {
   const cleanName = sanitizeFilename(`${artist}_${title}`);
   const targetMp3 = path.join(MUSIC_DIR, `${cleanName}.mp3`);
   const targetFlac = path.join(MUSIC_DIR, `${cleanName}.flac`);
+  const trackKey = `${artist}_${title}`.toLowerCase().replace(/[^a-z0-9]/g, '');
 
   // 1. If already saved on Proxmox disk, return immediately!
   if (fs.existsSync(targetFlac)) return { type: 'file', path: targetFlac };
@@ -62,33 +65,39 @@ export async function getOrDownloadTrack(title, artist) {
     return { type: 'file', path: localMatch };
   }
 
-  console.log(`[Proxmox Downloader] Instant CDN Lookahead for: "${artist} - ${title}"...`);
+  // 3. Await if already being downloaded by another request
+  if (inFlightDownloads.has(trackKey)) {
+    console.log(`[Proxmox Downloader] Awaiting in-flight download for: "${artist} - ${title}"...`);
+    const path = await inFlightDownloads.get(trackKey);
+    if (path && fs.existsSync(path)) return { type: 'file', path };
+  }
+
+  console.log(`[Proxmox Downloader] Fast native stream download: "${artist} - ${title}"...`);
   const cleanArtist = artist.replace(/["'$`\\]/g, '');
   const cleanTitle = title.replace(/["'$`\\]/g, '');
   const query = `${cleanArtist} ${cleanTitle} official audio`;
 
-  // Start background download of permanent high-bitrate master MP3
-  const downloadCmd = `yt-dlp --no-check-certificates --extractor-args "youtube:player_client=android,web" -x --audio-format mp3 --audio-quality 0 "ytsearch1:${query}" -o "${targetMp3}"`;
-  exec(downloadCmd, { timeout: 60000 }, (error) => {
-    if (!error && fs.existsSync(targetMp3)) {
-      console.log(`[Proxmox Storage] Master MP3 cached: ${targetMp3}`);
-    }
-  });
-
-  // Fetch direct streaming URL for instant sub-second playback
-  return new Promise((resolve) => {
-    const directCmd = `yt-dlp --no-check-certificates --extractor-args "youtube:player_client=android,web" -f "ba/b" -g "ytsearch1:${query}"`;
-    exec(directCmd, { timeout: 12000 }, (err, stdout) => {
-      if (!err && stdout) {
-        const url = stdout.trim().split('\n').filter((l) => l.startsWith('http'))[0];
-        if (url) {
-          return resolve({ type: 'redirect', url });
-        }
+  const downloadPromise = new Promise((resolve) => {
+    // Fast native audio download without slow ffmpeg transcoding delay
+    const downloadCmd = `yt-dlp --no-check-certificates --extractor-args "youtube:player_client=android,web" -f "ba/b" "ytsearch1:${query}" -o "${targetMp3}"`;
+    exec(downloadCmd, { timeout: 45000 }, (error) => {
+      inFlightDownloads.delete(trackKey);
+      if (!error && fs.existsSync(targetMp3)) {
+        console.log(`[Proxmox Storage] Master audio cached: ${targetMp3}`);
+        resolve(targetMp3);
+      } else {
+        const local = findExistingTrack(MUSIC_DIR, title, artist);
+        resolve(local);
       }
-      if (fs.existsSync(targetMp3)) {
-        return resolve({ type: 'file', path: targetMp3 });
-      }
-      resolve({ type: 'not_found' });
     });
   });
+
+  inFlightDownloads.set(trackKey, downloadPromise);
+  const downloadedPath = await downloadPromise;
+
+  if (downloadedPath && fs.existsSync(downloadedPath)) {
+    return { type: 'file', path: downloadedPath };
+  }
+
+  return { type: 'not_found' };
 }

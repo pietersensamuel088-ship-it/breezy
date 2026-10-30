@@ -48,6 +48,8 @@ function findLocalSong(title: string, artist: string): string | null {
   return scan(songsDir);
 }
 
+const inFlightDownloads = new Map<string, Promise<string | null>>();
+
 function breezyAudioStreamerPlugin(): Plugin {
   return {
     name: 'breezy-audio-streamer',
@@ -69,13 +71,14 @@ function breezyAudioStreamerPlugin(): Plugin {
         const url = new URL(req.url, 'http://127.0.0.1:5173');
         const title = url.searchParams.get('title') || 'Under the Influence';
         const artist = url.searchParams.get('artist') || 'Chris Brown';
+        const trackKey = `${artist}_${title}`.toLowerCase().replace(/[^a-z0-9]/g, '');
 
         console.log(`[Breezy Stream] Request for: "${artist} - ${title}"`);
 
         // 1. Check local nicsongs library
         let filePath = findLocalSong(title, artist);
 
-        // 2. If not yet downloaded on PC, fetch direct audio stream URL and download full MP3 in background!
+        // 2. If not yet downloaded, check if already being fetched or start fast native download
         if (!filePath || !fs.existsSync(filePath)) {
           const cleanArtist = artist.replace(/["'$`\\]/g, '');
           const cleanTitle = title.replace(/["'$`\\]/g, '');
@@ -83,43 +86,34 @@ function breezyAudioStreamerPlugin(): Plugin {
           const targetMp3 = path.resolve(__dirname, 'nicsongs', `${cleanName}.mp3`);
           const query = `${cleanArtist} ${cleanTitle} official audio`;
 
-          console.log(`[Breezy Stream] Instant CDN Lookahead for: "${artist} - ${title}"...`);
+          if (inFlightDownloads.has(trackKey)) {
+            console.log(`[Breezy Stream] Awaiting in-flight prefetch for: "${artist} - ${title}"...`);
+            filePath = await inFlightDownloads.get(trackKey)!;
+          } else {
+            console.log(`[Breezy Stream] Fast native stream download: "${artist} - ${title}"...`);
 
-          try {
-            // A. Grab high-speed direct CDN stream URL for instant sub-second playback
-            const directUrl = await new Promise<string | null>((resolve) => {
-              const cmd = `yt-dlp --no-check-certificates --extractor-args "youtube:player_client=android,web" -f "ba/b" -g "ytsearch1:${query}"`;
-              exec(cmd, { timeout: 12000 }, (error, stdout) => {
-                if (!error && stdout) {
-                  const url = stdout.trim().split('\n').filter((l) => l.startsWith('http'))[0];
-                  if (url) return resolve(url);
+            const downloadPromise = new Promise<string | null>((resolve) => {
+              // Fast native download (without slow ffmpeg transcoding delay)
+              const downloadCmd = `yt-dlp --no-check-certificates --extractor-args "youtube:player_client=android,web" -f "ba/b" "ytsearch1:${query}" -o "${targetMp3}"`;
+              exec(downloadCmd, { timeout: 45000 }, (err) => {
+                inFlightDownloads.delete(trackKey);
+                if (!err && fs.existsSync(targetMp3)) {
+                  console.log(`[Breezy Stream] Master audio saved to disk: ${targetMp3}`);
+                  resolve(targetMp3);
+                } else {
+                  // Check if local file exists
+                  const local = findLocalSong(title, artist);
+                  resolve(local);
                 }
-                resolve(null);
               });
             });
 
-            // B. In the background, ensure full master MP3 is downloaded & stored in nicsongs
-            const downloadCmd = `yt-dlp --no-check-certificates --extractor-args "youtube:player_client=android,web" -x --audio-format mp3 --audio-quality 0 "ytsearch1:${query}" -o "${targetMp3}"`;
-            exec(downloadCmd, { timeout: 60000 }, (err) => {
-              if (!err && fs.existsSync(targetMp3)) {
-                console.log(`[Breezy Stream] Background master download completed: ${targetMp3}`);
-              }
-            });
-
-            // C. If direct CDN URL acquired, redirect client for INSTANT playback!
-            if (directUrl) {
-              res.statusCode = 302;
-              res.setHeader('Location', directUrl);
-              res.setHeader('Access-Control-Allow-Origin', '*');
-              res.end();
-              return;
-            }
-          } catch (err: any) {
-            console.warn(`[Breezy Stream] Direct CDN stream fallback notice:`, err?.message);
+            inFlightDownloads.set(trackKey, downloadPromise);
+            filePath = await downloadPromise;
           }
         }
 
-        // 3. Check if local song matching the requested title exists
+        // 3. Fallback check for exact song
         if (!filePath || !fs.existsSync(filePath)) {
           filePath = findLocalSong(title, artist);
         }
@@ -134,9 +128,19 @@ function breezyAudioStreamerPlugin(): Plugin {
         const fileSize = stat.size;
         const range = req.headers.range;
 
+        const contentType = filePath.endsWith('.flac')
+          ? 'audio/flac'
+          : filePath.endsWith('.m4a') || filePath.endsWith('.mp4')
+          ? 'audio/mp4'
+          : filePath.endsWith('.webm')
+          ? 'audio/webm'
+          : 'audio/mpeg';
+
         res.setHeader('Accept-Ranges', 'bytes');
-        res.setHeader('Content-Type', 'audio/mpeg');
+        res.setHeader('Content-Type', contentType);
         res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type, Accept');
 
         if (range) {
           const parts = range.replace(/bytes=/, '').split('-');

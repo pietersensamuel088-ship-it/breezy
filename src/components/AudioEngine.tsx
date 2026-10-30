@@ -6,7 +6,11 @@ interface AudioEngineProps {
   width?: number;
   height?: number;
   numBars?: number;
+  audioElement?: HTMLAudioElement | null;
 }
+
+// Global WeakMap to prevent "MediaElementAudioSourceNode already connected" error
+const audioSourceMap = new WeakMap<HTMLAudioElement, { analyser: AnalyserNode; dataArray: Uint8Array }>();
 
 export const AudioVisualizer: React.FC<AudioEngineProps> = ({
   isPlaying,
@@ -14,9 +18,9 @@ export const AudioVisualizer: React.FC<AudioEngineProps> = ({
   width = 340,
   height = 50,
   numBars = 48,
+  audioElement,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const levelRef = useRef<number>(isPlaying ? 1.0 : 0.0);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -24,27 +28,54 @@ export const AudioVisualizer: React.FC<AudioEngineProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    let analyser: AnalyserNode | null = null;
+    let dataArray: Uint8Array | null = null;
+
+    if (audioElement) {
+      try {
+        if (audioSourceMap.has(audioElement)) {
+          const cached = audioSourceMap.get(audioElement)!;
+          analyser = cached.analyser;
+          dataArray = cached.dataArray;
+        } else {
+          const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+          if (AudioContextClass) {
+            const audioCtx = new AudioContextClass();
+            const source = audioCtx.createMediaElementSource(audioElement);
+            analyser = audioCtx.createAnalyser();
+            analyser.fftSize = 128;
+            analyser.smoothingTimeConstant = 0.8;
+            source.connect(analyser);
+            analyser.connect(audioCtx.destination);
+            dataArray = new Uint8Array(analyser.frequencyBinCount);
+            audioSourceMap.set(audioElement, { analyser, dataArray });
+          }
+        }
+      } catch {
+        // Fallback gracefully
+      }
+    }
+
     let animationFrameId: number;
-    let step = 0;
 
     const render = () => {
-      // Gentle spring/lerp interpolation so synthesizer levels rise & fall gracefully
-      const targetLevel = isPlaying ? 1.0 : 0.0;
-      levelRef.current += (targetLevel - levelRef.current) * 0.065;
-      const level = levelRef.current;
-
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const isActuallyAudible = isPlaying && audioElement && !audioElement.paused && audioElement.currentTime > 0;
+
+      if (analyser && dataArray && isActuallyAudible) {
+        analyser.getByteFrequencyData(dataArray as any);
+      }
 
       const barWidth = canvas.width / numBars - 2;
 
       for (let i = 0; i < numBars; i++) {
-        // Continuous wave physics scaled by gentle rising/falling level
-        const wave1 = Math.sin(i * 0.2 + step * 0.07) * 0.5 + 0.5;
-        const wave2 = Math.cos(i * 0.15 - step * 0.04) * 0.5 + 0.5;
-        const bassBoost = i < 14 ? Math.sin(step * 0.1) * 12 + 14 : 0;
+        let barHeight = 2; // Flat line when silent
 
-        const dynamicHeight = (wave1 * wave2 * (canvas.height * 0.72) + bassBoost) * level;
-        const barHeight = Math.max(3, dynamicHeight + 2 * (1 - level));
+        if (isActuallyAudible && dataArray) {
+          const rawVal = dataArray[i % dataArray.length] || 0;
+          barHeight = Math.max(2, (rawVal / 255) * canvas.height * 0.95);
+        }
 
         const x = i * (barWidth + 2);
         const y = canvas.height - barHeight;
@@ -52,18 +83,17 @@ export const AudioVisualizer: React.FC<AudioEngineProps> = ({
         // Gradient for bars
         const gradient = ctx.createLinearGradient(0, y, 0, canvas.height);
         gradient.addColorStop(0, accentColor || '#ffffff');
-        gradient.addColorStop(1, 'rgba(255, 255, 255, 0.04)');
+        gradient.addColorStop(1, 'rgba(255, 255, 255, 0.05)');
 
         ctx.fillStyle = gradient;
-        ctx.shadowColor = level > 0.1 ? accentColor : 'transparent';
-        ctx.shadowBlur = Math.round(12 * level);
+        ctx.shadowColor = isActuallyAudible ? accentColor : 'transparent';
+        ctx.shadowBlur = isActuallyAudible ? 10 : 0;
 
         ctx.beginPath();
         ctx.roundRect(x, y, Math.max(1, barWidth), barHeight, [2, 2, 0, 0]);
         ctx.fill();
       }
 
-      step++;
       animationFrameId = requestAnimationFrame(render);
     };
 
@@ -72,7 +102,7 @@ export const AudioVisualizer: React.FC<AudioEngineProps> = ({
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [isPlaying, accentColor, numBars]);
+  }, [isPlaying, accentColor, numBars, audioElement]);
 
   return (
     <div className="w-full flex items-center justify-center">

@@ -61,8 +61,13 @@ export function App() {
   const [latestGitHubCommit, setLatestGitHubCommit] = useState<GitHubCommitInfo | null>(null);
   const [isUpdateBannerDismissed, setIsUpdateBannerDismissed] = useState<boolean>(false);
 
-  // Periodic Background GitHub Update Check (every 60s)
+  // Background GitHub Update Check (Only for standalone Electron Desktop app)
   useEffect(() => {
+    // Only prompt for updates in Electron desktop app where 1-click update is native!
+    // Never annoy or loop reload in standard web browsers.
+    if (typeof window === 'undefined' || !window.electronAPI?.isElectron) {
+      return;
+    }
     const checkUpdate = async () => {
       const res = await checkForGitHubUpdate();
       if (res.hasUpdate) {
@@ -943,7 +948,11 @@ export function App() {
                 : 'max-h-0 opacity-0 translate-y-3 pointer-events-none'
             }`}
           >
-            <AudioVisualizer isPlaying={isPlaying} accentColor={currentSong.accentColor} />
+            <AudioVisualizer
+              isPlaying={isPlaying}
+              accentColor={currentSong.accentColor}
+              audioElement={audioRef.current}
+            />
           </div>
         </div>
 

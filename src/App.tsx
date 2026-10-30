@@ -237,18 +237,18 @@ export function App() {
         '--glow-color': currentSong.accentColor,
       } as React.CSSProperties}
     >
-      {/* Background Cinematic Aura */}
+      {/* Background Cinematic Aura - Soft, Organic, Seamless Blur (No block collision) */}
       <div
-        className="absolute -top-32 -left-32 w-[700px] h-[700px] rounded-full blur-[180px] opacity-25 pointer-events-none transition-all duration-1000"
-        style={{ backgroundColor: currentSong.accentColor }}
-      />
-      <div
-        className="absolute top-1/2 -right-32 w-[600px] h-[600px] rounded-full blur-[200px] opacity-20 pointer-events-none transition-all duration-1000"
+        className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[550px] rounded-full blur-[180px] opacity-25 pointer-events-none transition-all duration-1000"
         style={{ backgroundColor: selectedAlbum.accentColor }}
       />
+      <div
+        className="absolute -top-32 -left-32 w-[600px] h-[600px] rounded-full blur-[190px] opacity-15 pointer-events-none transition-all duration-1000"
+        style={{ backgroundColor: currentSong.accentColor }}
+      />
 
-      {/* TOP BAR / MINIMALIST LINE HEADER */}
-      <header className="relative z-30 h-20 px-8 flex items-center justify-between shrink-0">
+      {/* TOP BAR / SEAMLESS FLOATING HEADER (No block borders cutting off glows) */}
+      <header className="relative z-30 h-20 px-8 flex items-center justify-between shrink-0 bg-transparent">
         {/* Bold Squishy BREEZY Brand */}
         <div
           onClick={() => { setViewMode('home'); setSearchQuery(''); }}
@@ -298,17 +298,17 @@ export function App() {
 
       {/* MAIN SCREEN STAGE */}
       <main className="relative z-10 flex-1 overflow-hidden flex flex-col justify-center pb-24">
-        {/* VIEW 1: HOME PAGE — PURE CAROUSEL + OPTIONWHEEL ON THE SIDE */}
+        {/* VIEW 1: HOME PAGE — EXPANDED 3D CAROUSEL + OPTIONWHEEL ON THE SIDE */}
         {viewMode === 'home' && !filteredSongs && (
-          <div className="relative w-full h-full flex items-center justify-between px-6 lg:px-12 select-none animate-fadeIn">
+          <div className="relative w-full h-full flex items-center justify-between px-4 lg:px-8 select-none animate-fadeIn">
             {/* LEFT SIDE: REACT BITS OPTIONWHEEL (RECENT LISTENING HISTORY) */}
-            <aside className="hidden lg:flex flex-col justify-center w-72 h-[480px] z-30 pointer-events-auto">
+            <aside className="hidden lg:flex flex-col justify-center w-64 h-[500px] z-30 pointer-events-auto shrink-0">
               <div className="flex items-center gap-2 px-6 mb-3 text-zinc-400 font-mono text-[10px] tracking-[0.2em] uppercase">
                 <History className="w-3.5 h-3.5 text-luxury-gold" />
                 <span>Last Listened</span>
               </div>
 
-              <div className="w-full h-[400px] relative">
+              <div className="w-full h-[420px] relative">
                 <OptionWheel
                   items={historyLabels}
                   defaultSelected={0}
@@ -337,45 +337,36 @@ export function App() {
               </div>
             </aside>
 
-            {/* CENTER: THE 3D CIRCULAR CAROUSEL */}
-            <div className="relative flex-1 h-full flex flex-col items-center justify-center">
+            {/* CENTER: EXPANDED 3D CIRCULAR CAROUSEL (WRAPS AROUND PAGE) */}
+            <div className="relative flex-1 h-full flex flex-col items-center justify-center overflow-visible">
               {/* Elevated Table Pedestal Under-Shadow */}
               <div
-                className="absolute bottom-16 left-1/2 -translate-x-1/2 w-[680px] max-w-[70vw] h-12 rounded-full blur-2xl opacity-60 pointer-events-none transition-colors duration-700"
+                className="absolute bottom-12 left-1/2 -translate-x-1/2 w-[850px] max-w-[80vw] h-14 rounded-full blur-3xl opacity-70 pointer-events-none transition-colors duration-700"
                 style={{
                   backgroundColor: '#000000',
-                  boxShadow: `0 40px 100px 30px rgba(0,0,0,0.98), 0 0 50px 10px ${selectedAlbum.accentColor}20`
+                  boxShadow: `0 45px 120px 40px rgba(0,0,0,0.98), 0 0 60px 15px ${selectedAlbum.accentColor}25`
                 }}
               />
 
-              {/* Top Spotlight Fixture & Cone */}
-              <div
-                className="absolute top-2 left-1/2 -translate-x-1/2 w-52 h-2 rounded-full blur-md opacity-80 z-20 pointer-events-none transition-colors duration-700"
-                style={{
-                  backgroundColor: selectedAlbum.accentColor,
-                  boxShadow: `0 0 70px 20px ${selectedAlbum.accentColor}`
-                }}
-              />
-
-              {/* The Big React Bits CircularCarousel */}
-              <div className="w-full h-[580px] max-h-[75vh] flex items-center justify-center">
+              {/* Majestic CircularCarousel Wrapping Almost the Whole Stage */}
+              <div className="w-full h-[640px] max-h-[80vh] flex items-center justify-center">
                 <CircularCarousel
                   items={carouselItems}
                   preset="cylinder"
                   intro="assemble"
-                  cardWidth={290}
+                  cardWidth={320}
                   aspectRatio={1}
                   speed={8}
                   captions={true}
-                  gap={50}
-                  tilt={-4}
-                  perspective={2200}
+                  gap={60}
+                  tilt={-3.5}
+                  perspective={2350}
                   momentum={0.65}
                   snap={true}
                   parallax={0.35}
                   stretch={0.4}
                   fadeColor="#050608"
-                  cornerRadius={28}
+                  cornerRadius={30}
                   onChange={(index) => {
                     setSelectedAlbumIndex(index);
                     if (albums[index] && albums[index].songs.length > 0) {
@@ -389,19 +380,10 @@ export function App() {
                   className="w-full h-full"
                 />
               </div>
-
-              {/* Interactive Invitation Badge */}
-              <div
-                onClick={() => setViewMode('album')}
-                className="group cursor-pointer inline-flex items-center gap-2.5 px-5 py-2 rounded-full bg-white/[0.04] hover:bg-white/[0.1] border border-white/10 hover:border-white/25 backdrop-blur-md text-xs font-mono tracking-wider text-zinc-300 hover:text-white transition-all duration-300 hover:scale-105 active:scale-95 z-30 -mt-2"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-luxury-gold group-hover:rotate-12 transition-transform" />
-                <span>CLICK ALBUM TO EXPLORE TRACKS</span>
-              </div>
             </div>
 
-            {/* RIGHT SIDE: SYMMETRICAL SPACER / QUICK STATS */}
-            <aside className="hidden lg:flex flex-col justify-center items-end w-72 h-[480px] z-30 pointer-events-none pr-4">
+            {/* RIGHT SIDE: SYMMETRICAL COMPACT STATS */}
+            <aside className="hidden lg:flex flex-col justify-center items-end w-64 h-[500px] z-30 pointer-events-none pr-4 shrink-0">
               <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/5 backdrop-blur-md text-right space-y-3 pointer-events-auto">
                 <div className="flex items-center justify-end gap-2 text-xs font-mono text-zinc-400">
                   <span>AUDIO FIDELITY</span>

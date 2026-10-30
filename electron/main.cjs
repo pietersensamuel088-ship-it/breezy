@@ -51,13 +51,28 @@ function createWindow() {
   });
 }
 
-// GitHub Auto-Updater IPC Trigger
+// GitHub 1-Click Auto-Updater & Restart IPC Trigger
 ipcMain.handle('git-pull-update', async () => {
   return new Promise((resolve) => {
     exec('git pull origin main', { cwd: path.join(__dirname, '..') }, (error, stdout, stderr) => {
       if (error) {
         resolve({ success: false, output: stderr || error.message });
       } else {
+        resolve({ success: true, output: stdout });
+      }
+    });
+  });
+});
+
+ipcMain.handle('app-update-and-restart', async () => {
+  return new Promise((resolve) => {
+    exec('git pull origin main', { cwd: path.join(__dirname, '..') }, (error, stdout, stderr) => {
+      if (error) {
+        resolve({ success: false, error: stderr || error.message });
+      } else {
+        // Automatically relaunch the app at the newest version with 0 commands!
+        app.relaunch();
+        app.exit(0);
         resolve({ success: true, output: stdout });
       }
     });

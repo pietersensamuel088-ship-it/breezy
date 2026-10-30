@@ -8,10 +8,12 @@ import {
   GitBranch,
   CheckCircle2,
   AlertCircle,
-  ExternalLink,
-  Laptop
+  Laptop,
+  Server,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
-import { checkForGitHubUpdate, CURRENT_COMMIT_SHA, GITHUB_REPO, GitHubCommitInfo } from '../utils/githubUpdater';
+import { checkForGitHubUpdate, CURRENT_COMMIT_SHA, GitHubCommitInfo } from '../utils/githubUpdater';
 
 interface UserHubModalProps {
   isOpen: boolean;
@@ -28,10 +30,19 @@ export function UserHubModal({ isOpen, onClose, currentUser, onSwitchUser }: Use
     error?: string;
   } | null>(null);
 
+  // Proxmox VE Server Configuration State
+  const [backendUrl, setBackendUrl] = useState<string>(() => {
+    return (typeof window !== 'undefined' && localStorage.getItem('breezy_backend_url')) || 'http://127.0.0.1:5000';
+  });
+  const [pingStatus, setPingStatus] = useState<'idle' | 'testing' | 'online' | 'offline'>('idle');
+  const [pingLatency, setPingLatency] = useState<number | null>(null);
+  const [isApplyingUpdate, setIsApplyingUpdate] = useState<boolean>(false);
+
   // Check GitHub when modal opens
   useEffect(() => {
     if (isOpen) {
       handleCheckUpdate();
+      testBackendConnection(backendUrl);
     }
   }, [isOpen]);
 
@@ -46,9 +57,49 @@ export function UserHubModal({ isOpen, onClose, currentUser, onSwitchUser }: Use
     setChecking(false);
   };
 
-  const handleApplyUpdate = () => {
-    // In web/desktop, reloads the application to get newest cache
-    window.location.reload();
+  const handleApplyUpdate = async () => {
+    setIsApplyingUpdate(true);
+    try {
+      if (window.electronAPI?.autoUpdateAndRestart) {
+        await window.electronAPI.autoUpdateAndRestart();
+      } else {
+        window.location.reload();
+      }
+    } catch {
+      window.location.reload();
+    }
+  };
+
+  const testBackendConnection = async (urlToTest: string) => {
+    setPingStatus('testing');
+    const start = performance.now();
+    try {
+      const cleanUrl = urlToTest.trim().replace(/\/+$/, '');
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+      const res = await fetch(`${cleanUrl}/api/health`, {
+        signal: controller.signal,
+        headers: { 'Accept': 'application/json' }
+      });
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        const elapsed = Math.round(performance.now() - start);
+        setPingLatency(elapsed);
+        setPingStatus('online');
+      } else {
+        setPingStatus('offline');
+      }
+    } catch {
+      setPingStatus('offline');
+    }
+  };
+
+  const handleSaveBackendUrl = () => {
+    const clean = backendUrl.trim().replace(/\/+$/, '');
+    localStorage.setItem('breezy_backend_url', clean);
+    testBackendConnection(clean);
   };
 
   const downloadLauncher = () => {
@@ -88,7 +139,7 @@ pause
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-fadeIn">
-      <div className="relative w-full max-w-lg bg-[#0a0d14]/95 border border-white/10 rounded-3xl shadow-[0_30px_90px_rgba(0,0,0,0.95)] overflow-hidden p-6 sm:p-8 space-y-6">
+      <div className="relative w-full max-w-lg bg-[#0a0d14]/95 border border-white/10 rounded-3xl shadow-[0_30px_90px_rgba(0,0,0,0.95)] overflow-hidden p-6 sm:p-8 space-y-5 max-h-[92vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-white/[0.08] pb-4">
           <div className="flex items-center gap-2.5">
@@ -96,7 +147,7 @@ pause
               <User className="w-4 h-4 text-white" />
             </div>
             <div>
-              <h3 className="font-unbounded font-bold text-sm text-white">ACCOUNT & UPDATES</h3>
+              <h3 className="font-unbounded font-bold text-sm text-white">ACCOUNT & SETTINGS</h3>
               <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">
                 Breezy Master System
               </p>
@@ -139,13 +190,63 @@ pause
           </button>
         </div>
 
+        {/* Proxmox VE Server Hub Section */}
+        <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/5 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Server className="w-4 h-4 text-emerald-400" />
+              <span className="text-xs font-mono font-semibold uppercase tracking-wider text-zinc-300">
+                Proxmox Audio Server (Headless)
+              </span>
+            </div>
+            {pingStatus === 'online' && (
+              <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-mono text-emerald-400">
+                <Wifi className="w-3 h-3" />
+                <span>Online ({pingLatency}ms)</span>
+              </span>
+            )}
+            {pingStatus === 'offline' && (
+              <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-rose-500/10 border border-rose-500/30 text-[10px] font-mono text-rose-400">
+                <WifiOff className="w-3 h-3" />
+                <span>Unreachable</span>
+              </span>
+            )}
+            {pingStatus === 'testing' && (
+              <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/30 text-[10px] font-mono text-blue-400">
+                <RefreshCw className="w-3 h-3 animate-spin" />
+                <span>Pinging...</span>
+              </span>
+            )}
+          </div>
+
+          <p className="text-[11px] text-zinc-400 font-sans leading-relaxed">
+            All music stays permanently on your Proxmox server. Enter your Proxmox server IP:
+          </p>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={backendUrl}
+              onChange={(e) => setBackendUrl(e.target.value)}
+              placeholder="http://192.168.1.150:5000"
+              className="flex-1 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs font-mono text-white placeholder-zinc-600 focus:outline-none focus:border-luxury-blue transition-all"
+            />
+            <button
+              onClick={handleSaveBackendUrl}
+              className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs font-mono text-white font-semibold transition-all cursor-pointer whitespace-nowrap"
+            >
+              Save & Ping
+            </button>
+          </div>
+        </div>
+
         {/* GitHub Auto-Updater Section */}
         <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/5 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <GitBranch className="w-4 h-4 text-luxury-blue" />
               <span className="text-xs font-mono font-semibold uppercase tracking-wider text-zinc-300">
-                GitHub Auto-Updater
+                1-Click GitHub Auto-Updater
               </span>
             </div>
 
@@ -179,15 +280,17 @@ pause
                   </p>
                   <button
                     onClick={handleApplyUpdate}
-                    className="w-full py-2 px-3 rounded-lg bg-white text-black text-xs font-mono font-bold uppercase tracking-wider hover:bg-zinc-200 transition-colors shadow-md"
+                    disabled={isApplyingUpdate}
+                    className="w-full py-2.5 px-3 rounded-lg bg-white text-black text-xs font-mono font-bold uppercase tracking-wider hover:bg-zinc-200 transition-colors shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                   >
-                    Pull & Apply Update Now
+                    <RefreshCw className={`w-3.5 h-3.5 ${isApplyingUpdate ? 'animate-spin' : ''}`} />
+                    <span>{isApplyingUpdate ? 'Updating & Restarting...' : '1-Click Update App Now'}</span>
                   </button>
                 </div>
               ) : (
                 <div className="flex items-center gap-2 text-emerald-400 text-xs font-mono">
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>Up to date with GitHub main branch.</span>
+                  <span>Up to date with newest GitHub release.</span>
                 </div>
               )}
             </div>
@@ -199,12 +302,12 @@ pause
           <div className="flex items-center gap-2">
             <Laptop className="w-4 h-4 text-emerald-400" />
             <span className="text-xs font-mono font-semibold uppercase tracking-wider text-zinc-300">
-              Desktop Download & Auto-Sync
+              Standalone Desktop App
             </span>
           </div>
 
           <p className="text-xs text-zinc-400 font-sans leading-relaxed">
-            Download the 1-click Windows Desktop Launcher. It checks GitHub for new pushes on every launch, automatically updates, and opens Breezy in standalone desktop window mode.
+            Run Breezy as an authentic Windows desktop application without browser tabs. Download the 1-click launcher or open <span className="font-mono text-zinc-200">release/Breezy 1.0.0.exe</span>.
           </p>
 
           <button

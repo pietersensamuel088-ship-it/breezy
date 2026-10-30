@@ -9,7 +9,7 @@ export default defineConfig({
     port: 5173,
     host: true,
     watch: {
-      ignored: ['**/release/**', '**/public/music/**']
+      ignored: ['**/release/**', '**/public/music/**', '**/nicsongs/**']
     }
   }
 })

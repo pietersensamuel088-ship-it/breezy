@@ -1,0 +1,21 @@
+{
+  "name": "breezy-backend",
+  "version": "1.0.0",
+  "description": "Breezy Master Audio Headless Streaming & On-Demand Downloader Server",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.9",
+    "bcrypt": "^5.1.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "music-metadata": "^10.8.2",
+    "pg": "^8.13.1"
+  }
+}

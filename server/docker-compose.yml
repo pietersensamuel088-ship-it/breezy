@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  breezy-postgres:
+    image: postgres:16-alpine
+    container_name: breezy-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: breezy
+      POSTGRES_PASSWORD: breezy_master_password_2026
+      POSTGRES_DB: breezydb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - breezy-net
+
+  breezy-api:
+    build: .
+    container_name: breezy-api
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      PORT: 5000
+      DATABASE_URL: postgres://breezy:breezy_master_password_2026@breezy-postgres:5432/breezydb
+      JWT_SECRET: breezy_lossless_master_jwt_secret_key_2026
+      MUSIC_DIR: /data/music
+    volumes:
+      - music_storage:/data/music
+    depends_on:
+      - breezy-postgres
+    networks:
+      - breezy-net
+
+volumes:
+  postgres_data:
+    driver: local
+  music_storage:
+    # On Proxmox, you can bind-mount this to your ZFS pool, e.g.:
+    # driver_opts:
+    #   type: none
+    #   o: bind
+    #   device: /mnt/pve/storage/music
+    driver: local
+
+networks:
+  breezy-net:
+    driver: bridge

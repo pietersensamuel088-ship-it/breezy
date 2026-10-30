@@ -10,7 +10,8 @@ import { SyncedLyricsModal } from './components/SyncedLyricsModal';
 import { WelcomeOverlay } from './components/WelcomeOverlay';
 import { SongDetailModal } from './components/SongDetailModal';
 import { UserHubModal } from './components/UserHubModal';
-import { checkForGitHubUpdate } from './utils/githubUpdater';
+import { UpdateNotificationBanner } from './components/UpdateNotificationBanner';
+import { checkForGitHubUpdate, GitHubCommitInfo } from './utils/githubUpdater';
 import { audioSynth } from './utils/audioSynthesizer';
 import {
   Play,
@@ -53,6 +54,8 @@ export function App() {
   const [isWelcomeOpen, setIsWelcomeOpen] = useState<boolean>(true);
   const [isUserHubOpen, setIsUserHubOpen] = useState<boolean>(false);
   const [hasGitHubUpdate, setHasGitHubUpdate] = useState<boolean>(false);
+  const [latestGitHubCommit, setLatestGitHubCommit] = useState<GitHubCommitInfo | null>(null);
+  const [isUpdateBannerDismissed, setIsUpdateBannerDismissed] = useState<boolean>(false);
 
   // Periodic Background GitHub Update Check (every 60s)
   useEffect(() => {
@@ -60,6 +63,7 @@ export function App() {
       const res = await checkForGitHubUpdate();
       if (res.hasUpdate) {
         setHasGitHubUpdate(true);
+        setLatestGitHubCommit(res.latestCommit);
       }
     };
     checkUpdate();
@@ -888,6 +892,15 @@ export function App() {
           setIsWelcomeOpen(true);
         }}
       />
+
+      {/* 1-CLICK AUTOMATIC UPDATE PROMPT BANNER */}
+      {!isUpdateBannerDismissed && (
+        <UpdateNotificationBanner
+          hasUpdate={hasGitHubUpdate}
+          latestCommit={latestGitHubCommit}
+          onDismiss={() => setIsUpdateBannerDismissed(true)}
+        />
+      )}
 
       {/* APPLE-STYLE CURSIVE WELCOME SIGN-IN OVERLAY */}
       <WelcomeOverlay

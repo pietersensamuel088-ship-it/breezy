@@ -19,8 +19,10 @@ import {
   Search,
   Sparkles,
   ArrowLeft,
-  Disc3,
-  Layers
+  Pin,
+  PinOff,
+  X,
+  GripHorizontal
 } from 'lucide-react';
 
 export function App() {
@@ -33,7 +35,13 @@ export function App() {
   const [volume, setVolume] = useState<number>(0.85);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [isVolumeHovered, setIsVolumeHovered] = useState<boolean>(false);
+
+  // Draggable & Pinnable Volume State
+  const [isVolumeOpen, setIsVolumeOpen] = useState<boolean>(false);
+  const [isVolumePinned, setIsVolumePinned] = useState<boolean>(false);
+  const [volumePos, setVolumePos] = useState<{ x: number; y: number } | null>(null);
+  const [isDraggingVolume, setIsDraggingVolume] = useState<boolean>(false);
+  const dragStartRef = useRef<{ mouseX: number; mouseY: number; startX: number; startY: number } | null>(null);
   const volumeLeaveTimeout = useRef<number | null>(null);
 
   // View state: 'home' (Pure Fullscreen Carousel) vs 'album' (Split detail track view)
@@ -131,18 +139,60 @@ export function App() {
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
+  // Hover & Drag handling for Volume Dial
   const handleVolumeMouseEnter = () => {
     if (volumeLeaveTimeout.current) {
       clearTimeout(volumeLeaveTimeout.current);
       volumeLeaveTimeout.current = null;
     }
-    setIsVolumeHovered(true);
+    setIsVolumeOpen(true);
   };
 
   const handleVolumeMouseLeave = () => {
-    volumeLeaveTimeout.current = window.setTimeout(() => {
-      setIsVolumeHovered(false);
-    }, 450);
+    if (!isVolumePinned) {
+      volumeLeaveTimeout.current = window.setTimeout(() => {
+        setIsVolumeOpen(false);
+      }, 500);
+    }
+  };
+
+  // Dragging the Volume HUD
+  const handleDragStart = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDraggingVolume(true);
+    const currentX = volumePos?.x ?? (window.innerWidth - 260);
+    const currentY = volumePos?.y ?? (window.innerHeight - 340);
+
+    dragStartRef.current = {
+      mouseX: e.clientX,
+      mouseY: e.clientY,
+      startX: currentX,
+      startY: currentY
+    };
+
+    const target = e.currentTarget;
+    try {
+      target.setPointerCapture(e.pointerId);
+    } catch {}
+  };
+
+  const handleDragMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingVolume || !dragStartRef.current) return;
+    const dx = e.clientX - dragStartRef.current.mouseX;
+    const dy = e.clientY - dragStartRef.current.mouseY;
+
+    const newX = Math.max(16, Math.min(window.innerWidth - 240, dragStartRef.current.startX + dx));
+    const newY = Math.max(16, Math.min(window.innerHeight - 320, dragStartRef.current.startY + dy));
+
+    setVolumePos({ x: newX, y: newY });
+  };
+
+  const handleDragEnd = (e: React.PointerEvent<HTMLDivElement>) => {
+    setIsDraggingVolume(false);
+    dragStartRef.current = null;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {}
   };
 
   // Filter songs if searching
@@ -269,7 +319,6 @@ export function App() {
                 }}
                 onItemClick={(item, index) => {
                   setSelectedAlbumIndex(index);
-                  // Clicking an album slides to tracklist
                   setViewMode('album');
                 }}
                 className="w-full h-full"
@@ -410,6 +459,96 @@ export function App() {
         )}
       </main>
 
+      {/* DRAGGABLE & PINNABLE COMETDIAL VOLUME HUD */}
+      {isVolumeOpen && (
+        <div
+          className={`fixed p-5 rounded-3xl bg-[#0b0e14]/95 border border-white/15 backdrop-blur-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] flex flex-col items-center z-50 transition-shadow duration-300 ${
+            isDraggingVolume ? 'cursor-grabbing select-none' : ''
+          }`}
+          style={{
+            left: volumePos ? `${volumePos.x}px` : undefined,
+            top: volumePos ? `${volumePos.y}px` : undefined,
+            right: volumePos ? undefined : '28px',
+            bottom: volumePos ? undefined : '100px',
+            boxShadow: `0 25px 60px -10px rgba(0,0,0,0.95), 0 0 35px ${currentSong.accentColor}30`,
+          }}
+          onMouseEnter={handleVolumeMouseEnter}
+          onMouseLeave={handleVolumeMouseLeave}
+        >
+          {/* Draggable Top Bar with Drag Handle, Pin and Close Button */}
+          <div
+            onPointerDown={handleDragStart}
+            onPointerMove={handleDragMove}
+            onPointerUp={handleDragEnd}
+            className="w-full flex items-center justify-between pb-3 mb-2 border-b border-white/10 cursor-grab active:cursor-grabbing select-none"
+          >
+            <div className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors">
+              <GripHorizontal className="w-4 h-4 text-zinc-500" />
+              <span className="text-[10px] font-mono uppercase tracking-[0.2em] font-semibold text-zinc-300">
+                STUDIO GAIN
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5" onPointerDown={(e) => e.stopPropagation()}>
+              {/* Pin / Unpin Button */}
+              <button
+                onClick={() => setIsVolumePinned(!isVolumePinned)}
+                className={`p-1.5 rounded-lg text-xs transition-all ${
+                  isVolumePinned
+                    ? 'bg-luxury-blue/20 text-luxury-blue border border-luxury-blue/40'
+                    : 'text-zinc-500 hover:text-white hover:bg-white/10'
+                }`}
+                title={isVolumePinned ? 'Pinned in place (Click to unpin)' : 'Pin in place'}
+              >
+                {isVolumePinned ? <Pin className="w-3.5 h-3.5" /> : <PinOff className="w-3.5 h-3.5" />}
+              </button>
+
+              {/* Close 'X' Button */}
+              <button
+                onClick={() => {
+                  setIsVolumeOpen(false);
+                  setIsVolumePinned(false);
+                }}
+                className="p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-white/10 transition-colors"
+                title="Close volume dial"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* CometDial Dial Engine */}
+          <CometDial
+            value={Math.round(volume * 100)}
+            defaultValue={85}
+            min={0}
+            max={100}
+            step={1}
+            unit="%"
+            label="Volume"
+            accent={currentSong.accentColor || '#ffffff'}
+            ink="#ffffff"
+            size={170}
+            sweep={310}
+            thickness={5}
+            speed={28}
+            tapBounce={0.25}
+            flickBounce={0.25}
+            momentum={1.1}
+            cometReach={180}
+            cometWidth={10}
+            onChange={(val) => {
+              setVolume(val / 100);
+              setIsMuted(false);
+            }}
+          />
+
+          <div className="text-[9px] font-mono text-zinc-500 mt-2 tracking-wide">
+            Drag header to move anywhere &bull; Pin to keep open
+          </div>
+        </div>
+      )}
+
       {/* BOTTOM MASTER AUDIOPHILE PLAYER BAR */}
       <footer className="fixed bottom-0 left-0 right-0 z-40 h-22 px-8 flex items-center justify-between border-t border-white/[0.08] bg-[#07090e]/95 backdrop-blur-2xl">
         {/* Left: Now Playing Info */}
@@ -500,58 +639,12 @@ export function App() {
           </div>
         </div>
 
-        {/* Right: Interactive Hover CometDial Volume HUD */}
+        {/* Right: Trigger Volume Button & Pill */}
         <div
           className="relative flex items-center justify-end gap-3 w-1/4 min-w-[180px]"
           onMouseEnter={handleVolumeMouseEnter}
           onMouseLeave={handleVolumeMouseLeave}
         >
-          {/* Floating CometDial HUD Overlay */}
-          <div
-            className={`absolute bottom-full right-0 mb-4 p-5 rounded-3xl bg-[#0b0e14]/95 border border-white/15 backdrop-blur-2xl shadow-[0_20px_50px_rgba(0,0,0,0.85)] flex flex-col items-center transition-all duration-300 z-50 pointer-events-auto ${
-              isVolumeHovered
-                ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto'
-                : 'opacity-0 scale-90 translate-y-3 pointer-events-none'
-            }`}
-            style={{
-              boxShadow: `0 25px 60px -10px rgba(0,0,0,0.9), 0 0 30px ${currentSong.accentColor}25`
-            }}
-          >
-            <div className="text-[10px] font-mono uppercase tracking-[0.2em] text-zinc-400 mb-2 flex items-center gap-1.5">
-              <Sparkles className="w-3 h-3 text-luxury-gold" />
-              <span>Studio Gain</span>
-            </div>
-
-            <CometDial
-              value={Math.round(volume * 100)}
-              defaultValue={85}
-              min={0}
-              max={100}
-              step={1}
-              unit="%"
-              label="Volume"
-              accent={currentSong.accentColor || '#ffffff'}
-              ink="#ffffff"
-              size={170}
-              sweep={310}
-              thickness={5}
-              speed={28}
-              tapBounce={0.25}
-              flickBounce={0.25}
-              momentum={1.1}
-              cometReach={180}
-              cometWidth={10}
-              onChange={(val) => {
-                setVolume(val / 100);
-                setIsMuted(false);
-              }}
-            />
-
-            <div className="text-[9px] font-mono text-zinc-500 mt-2">
-              Drag or click dial to adjust
-            </div>
-          </div>
-
           {/* Trigger Icon & Mini Volume Pill in footer */}
           <button
             onClick={() => setIsMuted(!isMuted)}
@@ -566,8 +659,12 @@ export function App() {
           </button>
 
           <div
-            className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/10 hover:border-white/20 cursor-pointer transition-all hover:bg-white/[0.08]"
-            onClick={() => setIsVolumeHovered(!isVolumeHovered)}
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/[0.04] border border-white/10 hover:border-white/20 cursor-pointer transition-all hover:bg-white/[0.08]"
+            onClick={() => {
+              setIsVolumeOpen(!isVolumeOpen);
+              if (!isVolumeOpen) setIsVolumePinned(true);
+            }}
+            title="Click to toggle & pin draggable volume dial"
           >
             <span className="text-xs font-mono font-semibold tracking-wider text-white">
               {isMuted ? 'MUTED' : `${Math.round(volume * 100)}%`}

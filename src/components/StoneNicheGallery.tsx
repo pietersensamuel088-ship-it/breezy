@@ -1,151 +1,217 @@
-import React from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { Album } from '../types';
-import { Play, Disc3, Sparkles } from 'lucide-react';
+import { Play, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 
 interface StoneNicheGalleryProps {
   albums: Album[];
-  selectedAlbum: Album;
-  onSelectAlbum: (album: Album) => void;
-  onPlaySong: (album: Album) => void;
+  selectedIndex: number;
+  onSelectIndex: (index: number) => void;
+  onPlayAlbum: (album: Album) => void;
   isPlaying: boolean;
 }
 
 export const StoneNicheGallery: React.FC<StoneNicheGalleryProps> = ({
   albums,
-  selectedAlbum,
-  onSelectAlbum,
-  onPlaySong,
+  selectedIndex,
+  onSelectIndex,
+  onPlayAlbum,
   isPlaying,
 }) => {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+
+  const selectedAlbum = albums[selectedIndex] || albums[0];
+
+  // Mouse wheel horizontal cylinder rotation
+  const handleWheel = (e: React.WheelEvent) => {
+    if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+      if (e.deltaX > 20 && selectedIndex < albums.length - 1) {
+        onSelectIndex(selectedIndex + 1);
+      } else if (e.deltaX < -20 && selectedIndex > 0) {
+        onSelectIndex(selectedIndex - 1);
+      }
+    } else {
+      if (e.deltaY > 30 && selectedIndex < albums.length - 1) {
+        onSelectIndex(selectedIndex + 1);
+      } else if (e.deltaY < -30 && selectedIndex > 0) {
+        onSelectIndex(selectedIndex - 1);
+      }
+    }
+  };
+
+  // Touch drag support
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStart(e.touches[0].clientX);
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStart === null) return;
+    const touchEnd = e.changedTouches[0].clientX;
+    const diff = touchStart - touchEnd;
+    if (diff > 50 && selectedIndex < albums.length - 1) {
+      onSelectIndex(selectedIndex + 1);
+    } else if (diff < -50 && selectedIndex > 0) {
+      onSelectIndex(selectedIndex - 1);
+    }
+    setTouchStart(null);
+  };
+
   return (
-    <div className="relative w-full flex flex-col items-center justify-center pt-8 pb-12 overflow-hidden select-none">
-      {/* Cinematic Ambient Backlight */}
+    <div
+      ref={containerRef}
+      onWheel={handleWheel}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      className="relative w-full min-h-[460px] md:min-h-[520px] flex flex-col items-center justify-center pt-4 pb-8 select-none overflow-visible"
+    >
+      {/* Dynamic Fluid Atmospheric Aura */}
       <div
-        className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[350px] rounded-full blur-[120px] opacity-25 pointer-events-none transition-all duration-700"
+        className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[450px] rounded-full blur-[140px] opacity-30 pointer-events-none transition-all duration-1000"
         style={{ backgroundColor: selectedAlbum.accentColor }}
       />
 
-      {/* Luxury Collection Header */}
-      <div className="text-center z-10 mb-8 space-y-1">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs tracking-[0.25em] uppercase text-zinc-400 font-mono">
-          <Sparkles className="w-3.5 h-3.5 text-luxury-gold" />
-          The Exhibition
-        </div>
-        <h2 className="text-3xl md:text-5xl font-display font-medium tracking-wide text-white">
-          THE BREEZY ARCHIVES
-        </h2>
-        <p className="text-xs md:text-sm text-zinc-500 tracking-widest uppercase font-mono">
-          Master Audio Vault &bull; Bit-Perfect Studio Masters
-        </p>
-      </div>
+      {/* 3D CYLINDER STAGE */}
+      <div className="relative w-full max-w-6xl h-[380px] md:h-[440px] cylinder-stage flex items-center justify-center">
+        {/* Navigation arrow buttons - elegant & minimal */}
+        <button
+          onClick={() => onSelectIndex(Math.max(0, selectedIndex - 1))}
+          disabled={selectedIndex === 0}
+          className="absolute left-6 md:left-12 z-40 p-3 rounded-full bg-white/5 hover:bg-white/15 text-white disabled:opacity-0 transition-all backdrop-blur-md border border-white/10 hover:scale-110 active:scale-95"
+        >
+          <ChevronLeft className="w-5 h-5" />
+        </button>
 
-      {/* The Gallery Niches Row */}
-      <div className="relative z-10 w-full max-w-6xl px-4 flex items-end justify-center gap-4 md:gap-8 overflow-x-auto py-6">
-        {albums.map((album) => {
-          const isSelected = selectedAlbum.id === album.id;
+        <button
+          onClick={() => onSelectIndex(Math.min(albums.length - 1, selectedIndex + 1))}
+          disabled={selectedIndex === albums.length - 1}
+          className="absolute right-6 md:right-12 z-40 p-3 rounded-full bg-white/5 hover:bg-white/15 text-white disabled:opacity-0 transition-all backdrop-blur-md border border-white/10 hover:scale-110 active:scale-95"
+        >
+          <ChevronRight className="w-5 h-5" />
+        </button>
 
-          return (
-            <div
-              key={album.id}
-              onClick={() => onSelectAlbum(album)}
-              className="group relative flex flex-col items-center cursor-pointer transition-all duration-500 shrink-0"
-              style={{
-                transform: isSelected ? 'scale(1.05)' : 'scale(0.92)',
-                opacity: isSelected ? 1 : 0.65,
-              }}
-            >
-              {/* Stone Niche Alcove Frame */}
+        {/* The Cylindrical Carousel Items */}
+        <div className="relative w-full h-full flex items-center justify-center">
+          {albums.map((album, index) => {
+            const offset = index - selectedIndex;
+            const isCenter = offset === 0;
+
+            // Mathematical 3D Cylindrical coordinates
+            const rotateY = offset * -26; // Curves inward along the cylinder
+            const translateX = offset * 260; // Spacing along the circumference
+            const translateZ = -Math.abs(offset) * 110; // Pushes distant cards deeper into the cylinder
+            const scale = Math.max(0.7, 1 - Math.abs(offset) * 0.16);
+            const opacity = Math.abs(offset) > 2 ? 0 : Math.max(0.2, 1 - Math.abs(offset) * 0.38);
+
+            return (
               <div
-                className={`relative w-44 md:w-56 h-72 md:h-84 rounded-t-2xl stone-niche flex flex-col items-center justify-between p-4 overflow-hidden transition-all duration-500 ${
-                  isSelected ? 'border-white/20' : 'border-white/5'
-                }`}
+                key={album.id}
+                onClick={() => onSelectIndex(index)}
+                className="absolute cylinder-item cursor-pointer flex flex-col items-center"
                 style={{
-                  boxShadow: isSelected
-                    ? `0 20px 50px -10px ${album.accentColor}40, inset 0 20px 30px rgba(0,0,0,0.9)`
-                    : 'inset 0 20px 30px rgba(0,0,0,0.95)',
+                  transform: `translateX(${translateX}px) translateZ(${translateZ}px) rotateY(${rotateY}deg) scale(${scale})`,
+                  opacity,
+                  zIndex: 30 - Math.abs(offset),
+                  pointerEvents: Math.abs(offset) > 2 ? 'none' : 'auto',
                 }}
               >
-                {/* Overhead Spotlight Fixture */}
+                {/* Curved Organic Stone Alcove Frame */}
                 <div
-                  className="spotlight-bulb transition-all duration-500"
+                  className={`relative w-56 md:w-68 h-80 md:h-96 curved-stone-niche flex flex-col items-center justify-between p-5 overflow-hidden transition-all duration-700 ${
+                    isCenter ? 'border-white/25 ring-1 ring-white/20' : 'border-white/5'
+                  }`}
                   style={{
-                    backgroundColor: isSelected ? '#ffffff' : '#a1a1aa',
-                    boxShadow: isSelected
-                      ? `0 0 24px 6px #fff, 0 0 50px 16px ${album.accentColor}`
-                      : '0 0 10px 2px rgba(255,255,255,0.4)',
+                    boxShadow: isCenter
+                      ? `0 30px 80px -20px ${album.accentColor}50, inset 0 20px 40px rgba(0,0,0,0.95)`
+                      : 'inset 0 20px 40px rgba(0,0,0,0.95)',
                   }}
-                />
+                >
+                  {/* Overhead Spotlight (Only intense on center item) */}
+                  <div
+                    className="spotlight-source transition-all duration-700"
+                    style={{
+                      boxShadow: isCenter
+                        ? `0 0 35px 8px #ffffff, 0 0 70px 24px ${album.accentColor}`
+                        : '0 0 10px 2px rgba(255,255,255,0.2)',
+                    }}
+                  />
 
-                {/* Overhead Spotlight Light Beam Cone */}
-                <div
-                  className="spotlight-beam transition-opacity duration-500"
-                  style={{
-                    opacity: isSelected ? 0.9 : 0.35,
-                    background: `radial-gradient(ellipse at 50% 0%, ${
-                      isSelected ? 'rgba(255, 255, 255, 0.35)' : 'rgba(255, 255, 255, 0.12)'
-                    } 0%, rgba(255, 255, 255, 0.05) 50%, transparent 80%)`,
-                  }}
-                />
+                  <div
+                    className="spotlight-cone transition-opacity duration-700"
+                    style={{
+                      opacity: isCenter ? 1 : 0.25,
+                      background: `radial-gradient(ellipse at 50% 0%, ${
+                        isCenter ? 'rgba(255, 255, 255, 0.45)' : 'rgba(255, 255, 255, 0.1)'
+                      } 0%, rgba(255, 255, 255, 0.08) 50%, transparent 80%)`,
+                    }}
+                  />
 
-                {/* Floating Pedestal / Album Art */}
-                <div className="relative mt-8 z-20 flex flex-col items-center">
-                  <div className="relative w-36 md:w-44 h-36 md:h-44 rounded-lg overflow-hidden shadow-2xl transition-transform duration-500 group-hover:scale-105 border border-white/10">
-                    <img
-                      src={album.coverUrl}
-                      alt={album.title}
-                      className="w-full h-full object-cover"
-                    />
+                  {/* Artwork Showcase on Floating Pedestal */}
+                  <div className="relative mt-7 z-20 flex flex-col items-center group">
+                    <div className="relative w-44 md:w-54 h-44 md:h-54 rounded-2xl overflow-hidden shadow-2xl transition-transform duration-500 group-hover:scale-105 border border-white/10">
+                      <img
+                        src={album.coverUrl}
+                        alt={album.title}
+                        className="w-full h-full object-cover"
+                      />
 
-                    {/* Quick Play Overlay */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onPlaySong(album);
-                      }}
-                      className="absolute inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                    >
-                      <div className="w-12 h-12 rounded-full bg-white text-black flex items-center justify-center shadow-lg transform transition-transform hover:scale-110">
-                        <Play className="w-6 h-6 fill-black ml-0.5" />
-                      </div>
-                    </button>
+                      {/* Play Button Overlay */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onPlayAlbum(album);
+                        }}
+                        className="absolute inset-0 bg-black/45 backdrop-blur-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                      >
+                        <div className="w-14 h-14 rounded-full bg-white text-black flex items-center justify-center shadow-xl transform transition-transform hover:scale-110 active:scale-95">
+                          <Play className="w-6 h-6 fill-black ml-1" />
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Bottom Album Plate */}
+                  <div className="z-20 text-center pb-2">
+                    <h3 className="text-sm md:text-base font-display font-bold tracking-tight text-white line-clamp-1">
+                      {album.title}
+                    </h3>
+                    <p className="text-[11px] tracking-widest text-zinc-400 uppercase font-mono mt-0.5">
+                      {album.artist} &bull; {album.year}
+                    </p>
                   </div>
                 </div>
 
-                {/* Niche Base Plate & Plaque */}
-                <div className="z-20 text-center pb-2">
-                  <h3 className="text-xs md:text-sm font-semibold tracking-wider text-white line-clamp-1">
-                    {album.title}
-                  </h3>
-                  <p className="text-[10px] tracking-widest text-zinc-400 uppercase font-mono mt-0.5">
-                    {album.artist} &bull; {album.year}
-                  </p>
+                {/* Cylindrical Inverted Floor Reflection */}
+                <div
+                  className="w-56 md:w-68 h-28 reflection-surface overflow-hidden pointer-events-none mt-2"
+                >
+                  <div className="w-full h-full flex flex-col items-center justify-start opacity-35 blur-[1.5px]">
+                    <img
+                      src={album.coverUrl}
+                      alt=""
+                      className="w-40 md:w-48 h-40 md:h-48 object-cover rounded-xl"
+                    />
+                  </div>
                 </div>
               </div>
-
-              {/* Glossy Floor Reflection Effect */}
-              <div
-                className="w-44 md:w-56 h-28 floor-reflection overflow-hidden pointer-events-none mt-1"
-                style={{
-                  transform: 'scaleY(-1)',
-                  maskImage: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 80%)',
-                  WebkitMaskImage: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 80%)',
-                }}
-              >
-                <div className="w-full h-full flex flex-col items-center justify-start opacity-40 blur-[1px]">
-                  <img
-                    src={album.coverUrl}
-                    alt=""
-                    className="w-32 md:w-40 h-32 md:h-40 object-cover rounded-md"
-                  />
-                </div>
-              </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
-      {/* Wet Glossy Floor Gradient Base */}
-      <div className="w-full max-w-5xl h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent mt-2" />
+      {/* Subtle Cylinder Navigation Dots */}
+      <div className="flex items-center gap-2 mt-4 z-20">
+        {albums.map((_, i) => (
+          <button
+            key={i}
+            onClick={() => onSelectIndex(i)}
+            className={`transition-all duration-300 rounded-full ${
+              selectedIndex === i
+                ? 'w-6 h-1.5 bg-white'
+                : 'w-1.5 h-1.5 bg-white/20 hover:bg-white/40'
+            }`}
+          />
+        ))}
+      </div>
     </div>
   );
 };

@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { FEATURED_ALBUMS, ALL_SONGS } from './mockData';
-import { Album, Song, ProxmoxConfig } from './types';
+import { Album, Song } from './types';
 import { StoneNicheGallery } from './components/StoneNicheGallery';
 import { AudioVisualizer } from './components/AudioEngine';
 import { MusicDownloaderModal } from './components/MusicDownloaderModal';
 import { SyncedLyricsModal } from './components/SyncedLyricsModal';
-import { ProxmoxBridgeModal } from './components/ProxmoxBridgeModal';
+import { audioSynth } from './utils/audioSynthesizer';
 import {
   Play,
   Pause,
@@ -15,19 +15,14 @@ import {
   VolumeX,
   Mic2,
   Download,
-  Server,
   Search,
-  Radio,
-  Flame,
-  Disc3,
-  Layers,
   Sparkles,
-  Sliders
+  SlidersHorizontal
 } from 'lucide-react';
 
 export function App() {
   const [albums] = useState<Album[]>(FEATURED_ALBUMS);
-  const [selectedAlbum, setSelectedAlbum] = useState<Album>(FEATURED_ALBUMS[0]);
+  const [selectedAlbumIndex, setSelectedAlbumIndex] = useState<number>(0);
   const [currentSong, setCurrentSong] = useState<Song>(FEATURED_ALBUMS[0].songs[0]);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [currentTime, setCurrentTime] = useState<number>(0);
@@ -39,37 +34,47 @@ export function App() {
   // Modals
   const [isDownloaderOpen, setIsDownloaderOpen] = useState<boolean>(false);
   const [isLyricsOpen, setIsLyricsOpen] = useState<boolean>(false);
-  const [isProxmoxOpen, setIsProxmoxOpen] = useState<boolean>(false);
 
-  // Proxmox Configuration State
-  const [proxmoxConfig, setProxmoxConfig] = useState<ProxmoxConfig>({
-    host: '192.168.1.180',
-    port: 8080,
-    libraryPath: '/mnt/storage/breezy-music',
-    isConnected: true,
-    cachedBytes: 4184920,
-    streamLatencyMs: 3.8,
-  });
-
-  // Audio Reference
+  const selectedAlbum = albums[selectedAlbumIndex] || albums[0];
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Handle Audio playback
+  // Playback handling
   useEffect(() => {
-    if (!audioRef.current) return;
-    audioRef.current.volume = isMuted ? 0 : volume;
+    audioSynth.setVolume(isMuted ? 0 : volume);
+    if (audioRef.current) {
+      audioRef.current.volume = isMuted ? 0 : volume;
+    }
   }, [volume, isMuted]);
 
-  const togglePlay = () => {
-    if (!audioRef.current) return;
+  // Timer simulation for tracks
+  useEffect(() => {
+    let interval: number;
     if (isPlaying) {
-      audioRef.current.pause();
+      interval = window.setInterval(() => {
+        setCurrentTime((prev) => {
+          if (prev >= duration) {
+            handleNext();
+            return 0;
+          }
+          return prev + 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isPlaying, duration]);
+
+  const togglePlay = () => {
+    if (isPlaying) {
       setIsPlaying(false);
+      audioSynth.stopRhythm();
+      if (audioRef.current) audioRef.current.pause();
     } else {
-      audioRef.current.play().catch(() => {
-        // Fallback for autoplay policies
-      });
       setIsPlaying(true);
+      // Play high-fidelity synthesized rhythm immediately for browser feedback
+      audioSynth.startRhythm(currentSong.genre);
+      if (audioRef.current) {
+        audioRef.current.play().catch(() => {});
+      }
     }
   };
 
@@ -79,6 +84,8 @@ export function App() {
     setDuration(song.duration);
     setIsPlaying(true);
 
+    // Trigger instant audible audio
+    audioSynth.startRhythm(song.genre);
     if (audioRef.current) {
       audioRef.current.src = song.audioUrl;
       audioRef.current.play().catch(() => {});
@@ -97,17 +104,9 @@ export function App() {
     playSong(selectedAlbum.songs[prevIndex]);
   };
 
-  const handleTimeUpdate = () => {
-    if (!audioRef.current) return;
-    setCurrentTime(audioRef.current.currentTime);
-  };
-
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const seekTime = parseFloat(e.target.value);
     setCurrentTime(seekTime);
-    if (audioRef.current) {
-      audioRef.current.currentTime = seekTime;
-    }
   };
 
   const formatTime = (secs: number) => {
@@ -116,111 +115,80 @@ export function App() {
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  // Filter songs based on search
-  const filteredSongs = ALL_SONGS.filter(s =>
-    s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.artist.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.album.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Filter songs based on search query
+  const displayedSongs = searchQuery.trim() === ''
+    ? selectedAlbum.songs
+    : ALL_SONGS.filter(s =>
+        s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        s.artist.toLowerCase().includes(searchQuery.toLowerCase())
+      );
 
   return (
     <div
-      className="relative w-screen h-screen flex flex-col bg-[#050608] text-white overflow-hidden transition-colors duration-700"
+      className="relative w-screen h-screen flex flex-col bg-[#050608] text-white overflow-hidden transition-colors duration-1000"
       style={{
         '--glow-color': currentSong.accentColor,
       } as React.CSSProperties}
     >
-      {/* Hidden Audio Element */}
-      <audio
-        ref={audioRef}
-        src={currentSong.audioUrl}
-        onTimeUpdate={handleTimeUpdate}
-        onEnded={handleNext}
-      />
-
-      {/* Dynamic Background Atmospheric Lighting */}
+      {/* Background Ambience */}
       <div
-        className="absolute -top-32 -left-32 w-[600px] h-[600px] rounded-full blur-[160px] opacity-20 pointer-events-none transition-all duration-1000"
+        className="absolute -top-40 -left-40 w-[700px] h-[700px] rounded-full blur-[180px] opacity-25 pointer-events-none transition-all duration-1000"
         style={{ backgroundColor: currentSong.accentColor }}
       />
       <div
-        className="absolute top-1/2 -right-32 w-[500px] h-[500px] rounded-full blur-[180px] opacity-15 pointer-events-none transition-all duration-1000"
+        className="absolute top-1/2 -right-40 w-[600px] h-[600px] rounded-full blur-[200px] opacity-20 pointer-events-none transition-all duration-1000"
         style={{ backgroundColor: selectedAlbum.accentColor }}
       />
 
-      {/* TOP BAR / NAVIGATION */}
-      <header className="relative z-30 h-18 px-6 flex items-center justify-between border-b border-white/[0.07] bg-black/40 backdrop-blur-xl shrink-0">
-        {/* Brand */}
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-luxury-blue to-purple-600 flex items-center justify-center shadow-[0_0_20px_rgba(59,130,246,0.6)]">
-              <Disc3 className="w-5 h-5 text-white animate-spin-slow" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-display font-bold tracking-[0.2em] text-lg text-white">
-                  BREEZY
-                </span>
-                <span className="px-1.5 py-0.5 rounded text-[9px] font-mono tracking-widest bg-luxury-blue/20 text-luxury-blue border border-luxury-blue/40 uppercase">
-                  Hi-Res
-                </span>
-              </div>
-              <p className="text-[10px] tracking-wider text-zinc-400 font-mono">
-                CHRIS BROWN TRIBUTE &bull; PROXMOX AUDIO VAULT
-              </p>
-            </div>
-          </div>
+      {/* TOP BAR / MINIMALIST LINE HEADER */}
+      <header className="relative z-30 h-20 px-8 flex items-center justify-between shrink-0">
+        {/* Bold Squishy BREEZY Brand (Unbounded font, no logo icon) */}
+        <div className="flex items-center gap-3">
+          <span className="font-unbounded font-black text-2xl md:text-3xl tracking-tighter text-white drop-shadow-[0_0_20px_rgba(255,255,255,0.3)]">
+            BREEZY
+          </span>
+          <span className="text-[10px] font-mono tracking-[0.2em] uppercase text-zinc-500 hidden sm:inline">
+            // MASTER AUDIO
+          </span>
         </div>
 
-        {/* Search Bar */}
-        <div className="hidden md:flex items-center w-80 relative">
-          <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 pointer-events-none" />
+        {/* Minimalist Search Underline */}
+        <div className="flex items-center w-72 md:w-96 relative group">
+          <Search className="w-4 h-4 text-zinc-500 group-focus-within:text-white transition-colors absolute left-0" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search Chris Brown, Drake, tracks..."
-            className="w-full pl-9 pr-4 py-1.5 text-xs rounded-full bg-white/5 border border-white/10 text-white placeholder-zinc-500 focus:outline-hidden focus:border-luxury-blue transition-all"
+            placeholder="Search tracks or artists..."
+            className="w-full pl-7 pr-3 py-1.5 text-xs font-sans text-white placeholder-zinc-500 minimal-search-input focus:outline-hidden"
           />
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center gap-3">
-          {/* Download Songs Assistant Button */}
+        {/* Action Controls - Sleek & Reactive */}
+        <div className="flex items-center gap-4">
           <button
             onClick={() => setIsDownloaderOpen(true)}
-            className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-medium text-zinc-200 transition-all hover:scale-105"
+            className="group flex items-center gap-2 px-4 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.1] border border-white/10 text-xs font-mono text-zinc-300 hover:text-white transition-all duration-300 hover:scale-105 active:scale-95"
           >
-            <Download className="w-3.5 h-3.5 text-luxury-gold" />
-            <span>Download Music</span>
-          </button>
-
-          {/* Proxmox Bridge Status Button */}
-          <button
-            onClick={() => setIsProxmoxOpen(true)}
-            className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-xs font-mono text-emerald-300 transition-all"
-          >
-            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <Server className="w-3.5 h-3.5" />
-            <span>Proxmox: {proxmoxConfig.host}</span>
+            <Download className="w-3.5 h-3.5 text-white group-hover:text-luxury-blue transition-colors" />
+            <span>GET MUSIC</span>
           </button>
         </div>
       </header>
 
-      {/* MAIN CONTENT AREA */}
-      <main className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden flex flex-col">
-        {/* Exhibition Spotlight Stage (From reference photo) */}
+      {/* MAIN SCROLLABLE BODY */}
+      <main className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden flex flex-col pb-28">
+        {/* 3D CYLINDER SPHERE STAGE */}
         <StoneNicheGallery
           albums={albums}
-          selectedAlbum={selectedAlbum}
-          onSelectAlbum={(album) => {
-            setSelectedAlbum(album);
-            if (album.songs.length > 0) {
-              playSong(album.songs[0]);
+          selectedIndex={selectedAlbumIndex}
+          onSelectIndex={(idx) => {
+            setSelectedAlbumIndex(idx);
+            if (albums[idx].songs.length > 0) {
+              playSong(albums[idx].songs[0]);
             }
           }}
-          onPlaySong={(album) => {
-            setSelectedAlbum(album);
+          onPlayAlbum={(album) => {
             if (album.songs.length > 0) {
               playSong(album.songs[0]);
             }
@@ -228,49 +196,45 @@ export function App() {
           isPlaying={isPlaying}
         />
 
-        {/* TRACKLIST & AUDIO SPECS TABLE */}
-        <div className="w-full max-w-5xl mx-auto px-6 py-6 space-y-4">
-          <div className="flex items-center justify-between border-b border-white/10 pb-3">
+        {/* TRACKLIST CONTAINER */}
+        <div className="w-full max-w-4xl mx-auto px-6 pt-4 space-y-4">
+          <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
             <div>
-              <h3 className="text-xl font-display font-medium text-white flex items-center gap-2">
-                <span>{selectedAlbum.title}</span>
-                <span className="text-xs font-mono text-zinc-400 font-normal">
-                  ({selectedAlbum.songs.length} Tracks)
-                </span>
+              <h3 className="text-xl md:text-2xl font-unbounded font-bold tracking-tight text-white">
+                {selectedAlbum.title}
               </h3>
-              <p className="text-xs text-zinc-400 font-mono mt-0.5">
-                {selectedAlbum.description}
+              <p className="text-xs text-zinc-400 font-sans mt-0.5">
+                {selectedAlbum.artist} &bull; {selectedAlbum.tracksCount} Master Tracks &bull; {selectedAlbum.description}
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <span className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] font-mono uppercase text-luxury-gold flex items-center gap-1.5">
-                <Sparkles className="w-3 h-3" />
-                Bit-Perfect FLAC
+              <span className="px-3 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] font-mono uppercase text-white/80 tracking-wider">
+                FLAC 24-Bit / 96kHz
               </span>
             </div>
           </div>
 
           {/* Songs List */}
-          <div className="space-y-1.5">
-            {selectedAlbum.songs.map((song, index) => {
+          <div className="space-y-2">
+            {displayedSongs.map((song, index) => {
               const isCurrent = currentSong.id === song.id;
               return (
                 <div
                   key={song.id}
                   onClick={() => playSong(song)}
-                  className={`group flex items-center justify-between px-4 py-3 rounded-xl cursor-pointer transition-all ${
+                  className={`group relative flex items-center justify-between px-5 py-3.5 rounded-2xl cursor-pointer transition-all duration-300 ${
                     isCurrent
-                      ? 'bg-white/10 border border-white/15 shadow-lg'
-                      : 'hover:bg-white/5 border border-transparent'
+                      ? 'bg-white/10 border border-white/20 shadow-[0_10px_30px_rgba(0,0,0,0.6)] backdrop-blur-md'
+                      : 'hover:bg-white/5 border border-transparent hover:border-white/5'
                   }`}
                 >
                   <div className="flex items-center gap-4">
-                    <span className="w-5 text-center text-xs font-mono text-zinc-500 group-hover:text-white">
+                    <span className="w-5 text-center text-xs font-mono text-zinc-500 group-hover:text-white transition-colors">
                       {isCurrent && isPlaying ? (
                         <div className="flex items-end justify-center gap-0.5 h-3.5">
-                          <span className="w-0.5 h-full bg-luxury-blue animate-pulse" />
-                          <span className="w-0.5 h-2 bg-luxury-blue animate-pulse delay-75" />
-                          <span className="w-0.5 h-3 bg-luxury-blue animate-pulse delay-150" />
+                          <span className="w-0.5 h-full bg-white animate-pulse" />
+                          <span className="w-0.5 h-2 bg-white animate-pulse delay-75" />
+                          <span className="w-0.5 h-3 bg-white animate-pulse delay-150" />
                         </div>
                       ) : (
                         index + 1
@@ -280,24 +244,23 @@ export function App() {
                     <img
                       src={song.coverUrl}
                       alt=""
-                      className="w-10 h-10 rounded-lg object-cover shadow-md"
+                      className="w-11 h-11 rounded-xl object-cover shadow-md border border-white/10 transition-transform duration-300 group-hover:scale-105"
                     />
 
                     <div>
                       <h4
-                        className={`text-sm font-semibold tracking-wide ${
-                          isCurrent ? 'text-white' : 'text-zinc-200 group-hover:text-white'
+                        className={`text-sm font-semibold tracking-wide transition-colors ${
+                          isCurrent ? 'text-white font-bold' : 'text-zinc-300 group-hover:text-white'
                         }`}
                       >
                         {song.title}
                       </h4>
-                      <p className="text-xs text-zinc-400 font-mono">{song.artist}</p>
+                      <p className="text-xs text-zinc-500 font-mono mt-0.5">{song.artist}</p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-4">
-                    {/* Audiophile badge */}
-                    <span className="hidden sm:inline-block px-2 py-0.5 rounded text-[10px] font-mono tracking-wider bg-white/5 text-zinc-400 border border-white/5">
+                  <div className="flex items-center gap-5">
+                    <span className="hidden sm:inline-block px-2.5 py-0.5 rounded-md text-[10px] font-mono tracking-wider bg-white/5 text-zinc-400 border border-white/5">
                       {song.bitrate}
                     </span>
 
@@ -313,10 +276,10 @@ export function App() {
       </main>
 
       {/* BOTTOM MASTER AUDIOPHILE PLAYER BAR */}
-      <footer className="relative z-30 h-22 px-6 flex items-center justify-between border-t border-white/[0.08] bg-[#07090f]/90 backdrop-blur-2xl shrink-0">
-        {/* Left: Now Playing Metadata */}
-        <div className="flex items-center gap-3.5 w-1/4 min-w-[200px]">
-          <div className="relative w-14 h-14 rounded-xl overflow-hidden shadow-[0_0_20px_rgba(0,0,0,0.8)] border border-white/10 shrink-0">
+      <footer className="fixed bottom-0 left-0 right-0 z-40 h-22 px-8 flex items-center justify-between border-t border-white/[0.08] bg-[#07090e]/95 backdrop-blur-2xl">
+        {/* Left: Now Playing Info */}
+        <div className="flex items-center gap-4 w-1/4 min-w-[220px]">
+          <div className="relative w-14 h-14 rounded-xl overflow-hidden shadow-2xl border border-white/10 shrink-0">
             <img
               src={currentSong.coverUrl}
               alt=""
@@ -324,7 +287,7 @@ export function App() {
             />
             {isPlaying && (
               <div
-                className="absolute inset-0 opacity-40 blur-sm pointer-events-none"
+                className="absolute inset-0 opacity-40 blur-xs pointer-events-none"
                 style={{ backgroundColor: currentSong.accentColor }}
               />
             )}
@@ -335,7 +298,7 @@ export function App() {
             </h4>
             <p className="text-xs text-zinc-400 truncate font-mono">{currentSong.artist}</p>
             <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
               <span className="text-[10px] text-zinc-400 font-mono tracking-wider">
                 {currentSong.bitrate}
               </span>
@@ -343,20 +306,20 @@ export function App() {
           </div>
         </div>
 
-        {/* Center: Controls, Scrub Bar & Audio Visualizer */}
-        <div className="flex flex-col items-center justify-center flex-1 max-w-xl px-4 space-y-1.5">
-          {/* Controls */}
-          <div className="flex items-center gap-5">
+        {/* Center: Controls, Scrubber & Visualizer */}
+        <div className="flex flex-col items-center justify-center flex-1 max-w-xl px-4 space-y-1">
+          {/* Action Buttons */}
+          <div className="flex items-center gap-6">
             <button
               onClick={handlePrev}
-              className="text-zinc-400 hover:text-white transition-colors"
+              className="text-zinc-400 hover:text-white transition-transform hover:scale-110 active:scale-95"
             >
               <SkipBack className="w-4 h-4" />
             </button>
 
             <button
               onClick={togglePlay}
-              className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center shadow-[0_0_20px_rgba(255,255,255,0.4)] hover:scale-105 transition-transform"
+              className="w-11 h-11 rounded-full bg-white text-black flex items-center justify-center shadow-[0_0_25px_rgba(255,255,255,0.4)] hover:scale-105 active:scale-95 transition-all"
             >
               {isPlaying ? (
                 <Pause className="w-5 h-5 fill-black" />
@@ -367,16 +330,16 @@ export function App() {
 
             <button
               onClick={handleNext}
-              className="text-zinc-400 hover:text-white transition-colors"
+              className="text-zinc-400 hover:text-white transition-transform hover:scale-110 active:scale-95"
             >
               <SkipForward className="w-4 h-4" />
             </button>
 
-            {/* Synced Lyrics toggle */}
+            {/* Synced Lyrics */}
             <button
               onClick={() => setIsLyricsOpen(true)}
-              className="text-zinc-400 hover:text-luxury-blue transition-colors relative"
-              title="Synced Lyrics"
+              className="text-zinc-400 hover:text-white transition-colors"
+              title="Karaoke Lyrics"
             >
               <Mic2 className="w-4 h-4" />
             </button>
@@ -391,51 +354,41 @@ export function App() {
               max={duration || 100}
               value={currentTime}
               onChange={handleSeek}
-              className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-luxury-blue"
+              className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-white"
             />
             <span>{formatTime(duration)}</span>
           </div>
 
-          {/* Real-time Dynamic Audio Visualizer */}
+          {/* Visualizer */}
           <div className="hidden md:block w-full">
             <AudioVisualizer isPlaying={isPlaying} accentColor={currentSong.accentColor} />
           </div>
         </div>
 
-        {/* Right: Volume & Proxmox Latency Indicator */}
-        <div className="flex items-center justify-end gap-4 w-1/4 min-w-[180px]">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsMuted(!isMuted)}
-              className="text-zinc-400 hover:text-white transition-colors"
-            >
-              {isMuted || volume === 0 ? (
-                <VolumeX className="w-4 h-4" />
-              ) : (
-                <Volume2 className="w-4 h-4" />
-              )}
-            </button>
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.01}
-              value={isMuted ? 0 : volume}
-              onChange={(e) => {
-                setVolume(parseFloat(e.target.value));
-                setIsMuted(false);
-              }}
-              className="w-20 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-white"
-            />
-          </div>
-
+        {/* Right: Volume */}
+        <div className="flex items-center justify-end gap-3 w-1/4 min-w-[180px]">
           <button
-            onClick={() => setIsProxmoxOpen(true)}
-            className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/5 border border-white/5 text-[10px] font-mono text-emerald-400"
-            title="Stream Latency to Proxmox"
+            onClick={() => setIsMuted(!isMuted)}
+            className="text-zinc-400 hover:text-white transition-colors"
           >
-            <span>{proxmoxConfig.streamLatencyMs}ms</span>
+            {isMuted || volume === 0 ? (
+              <VolumeX className="w-4 h-4" />
+            ) : (
+              <Volume2 className="w-4 h-4" />
+            )}
           </button>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={isMuted ? 0 : volume}
+            onChange={(e) => {
+              setVolume(parseFloat(e.target.value));
+              setIsMuted(false);
+            }}
+            className="w-24 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-white"
+          />
         </div>
       </footer>
 
@@ -451,14 +404,8 @@ export function App() {
         isOpen={isLyricsOpen}
         onClose={() => setIsLyricsOpen(false)}
       />
-
-      <ProxmoxBridgeModal
-        isOpen={isProxmoxOpen}
-        onClose={() => setIsProxmoxOpen(false)}
-        config={proxmoxConfig}
-        onUpdateConfig={setProxmoxConfig}
-      />
     </div>
   );
 }
+
 export default App;

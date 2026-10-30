@@ -3,90 +3,95 @@
 @tailwind utilities;
 
 :root {
-  --primary-accent: #3b82f6;
-  --glow-color: rgba(59, 130, 246, 0.35);
+  --glow-color: rgba(59, 130, 246, 0.4);
 }
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
 }
 ::-webkit-scrollbar-track {
-  background: #090a0f;
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #232838;
+  background: rgba(255, 255, 255, 0.15);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #3b82f6;
+  background: rgba(255, 255, 255, 0.3);
 }
 
-/* Luxury Rock/Stone Texture for Alcove Niches */
-.stone-texture {
-  background-color: #0d0f14;
-  background-image: 
-    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.08) 0%, transparent 60%),
-    radial-gradient(ellipse at 50% 100%, rgba(0, 0, 0, 0.9) 0%, transparent 80%),
-    linear-gradient(180deg, #12151d 0%, #080a0e 100%);
-  position: relative;
+/* 3D Cylinder Perspective */
+.cylinder-stage {
+  perspective: 1400px;
+  perspective-origin: 50% 45%;
+  transform-style: preserve-3d;
 }
 
-.stone-niche {
-  background: linear-gradient(180deg, #11141c 0%, #07080c 100%);
+.cylinder-item {
+  transform-style: preserve-3d;
+  transition: transform 0.65s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.65s cubic-bezier(0.16, 1, 0.3, 1), filter 0.65s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform, opacity;
+}
+
+/* Organic curved stone alcove with smooth rounded corners */
+.curved-stone-niche {
+  background: radial-gradient(circle at 50% 10%, #161b26 0%, #080a0f 85%);
+  border-radius: 28px;
   box-shadow: 
-    inset 0 16px 32px rgba(0, 0, 0, 0.9),
-    inset 0 -8px 24px rgba(0, 0, 0, 0.95),
-    inset 8px 0 20px rgba(0, 0, 0, 0.8),
-    inset -8px 0 20px rgba(0, 0, 0, 0.8),
-    0 12px 40px rgba(0, 0, 0, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+    inset 0 16px 40px rgba(0, 0, 0, 0.95),
+    inset 0 -10px 30px rgba(0, 0, 0, 0.9),
+    inset 8px 0 25px rgba(0, 0, 0, 0.75),
+    inset -8px 0 25px rgba(0, 0, 0, 0.75),
+    0 25px 60px -15px rgba(0, 0, 0, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-/* Overhead Spotlight Beam */
-.spotlight-beam {
+/* Overhead spotlight */
+.spotlight-source {
+  position: absolute;
+  top: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 50px;
+  height: 8px;
+  background: #ffffff;
+  border-radius: 0 0 100px 100px;
+  box-shadow: 0 0 30px 8px #ffffff, 0 0 60px 20px var(--glow-color);
+  z-index: 30;
+}
+
+.spotlight-cone {
   position: absolute;
   top: 0;
   left: 50%;
   transform: translateX(-50%);
-  width: 80%;
-  height: 90%;
-  background: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.05) 45%, transparent 75%);
+  width: 85%;
+  height: 95%;
+  background: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.08) 50%, transparent 80%);
   pointer-events: none;
-  filter: blur(8px);
+  filter: blur(10px);
+  z-index: 10;
 }
 
-.spotlight-bulb {
-  position: absolute;
-  top: 0px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 44px;
-  height: 8px;
-  background: #ffffff;
-  border-radius: 0 0 100px 100px;
-  box-shadow: 0 0 24px 6px rgba(255, 255, 255, 0.9), 0 0 50px 15px var(--glow-color);
-}
-
-/* Reflective Floor (Mirror effect) */
-.reflective-floor {
-  background: linear-gradient(180deg, rgba(8, 10, 15, 0.85) 0%, #040507 100%);
-  position: relative;
-}
-
-.floor-reflection {
+/* Glossy reflection floor */
+.reflection-surface {
   transform: scaleY(-1);
-  opacity: 0.28;
-  filter: blur(3px) brightness(0.7);
+  opacity: 0.25;
+  filter: blur(2.5px) brightness(0.7);
   mask-image: linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 80%);
-  -webkit-mask-image: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 75%);
+  -webkit-mask-image: linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0) 75%);
 }
 
-/* Glassmorphism panels */
-.glass-panel {
-  background: rgba(14, 18, 25, 0.7);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+/* Minimalist Search Underline */
+.minimal-search-input {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  transition: all 0.3s ease;
+}
+.minimal-search-input:focus {
+  border-bottom: 1px solid #ffffff;
+  box-shadow: 0 2px 15px -2px var(--glow-color);
 }

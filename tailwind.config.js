@@ -8,29 +8,27 @@ export default {
     extend: {
       colors: {
         obsidian: {
-          950: '#060709',
-          900: '#0b0d12',
-          850: '#10131a',
-          800: '#161b24',
-          700: '#232a38'
+          950: '#040507',
+          900: '#080a0f',
+          850: '#0e1118',
+          800: '#141822',
+          700: '#1e2433'
         },
         luxury: {
           gold: '#dfba73',
           bronze: '#b8864a',
           silver: '#e2e8f0',
           blue: '#3b82f6',
+          purple: '#a855f7',
           amber: '#f59e0b'
         }
       },
       fontFamily: {
-        display: ['Cinzel', 'Playfair Display', 'serif', 'system-ui'],
+        display: ['Unbounded', 'Syne', 'Plus Jakarta Sans', 'sans-serif'],
+        unbounded: ['Unbounded', 'sans-serif'],
+        syne: ['Syne', 'sans-serif'],
         sans: ['Plus Jakarta Sans', 'Inter', 'sans-serif']
       },
-      boxShadow: {
-        'niche': 'inset 0 10px 40px rgba(0,0,0,0.95), inset 0 0 15px rgba(0,0,0,0.8), 0 0 30px rgba(0,0,0,0.5)',
-        'spotlight': '0 -20px 60px rgba(255, 255, 255, 0.15)',
-        'glow-dynamic': '0 0 50px var(--glow-color, rgba(223, 186, 115, 0.25))'
-      }
     },
   },
   plugins: [],

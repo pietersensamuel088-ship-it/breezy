@@ -34,10 +34,10 @@ app.get('/api/health', (req, res) => {
 
 // 2. On-Demand Stream Endpoint (Spotify-like: zero client disk space)
 app.get('/api/stream', async (req, res) => {
-  const { title = 'Under the Influence', artist = 'Chris Brown' } = req.query;
+  const { id = '', title = 'Under the Influence', artist = 'Chris Brown' } = req.query;
 
   try {
-    const result = await getOrDownloadTrack(String(title), String(artist));
+    const result = await getOrDownloadTrack(String(title), String(artist), String(id));
     if (result.type === 'file') {
       streamAudioFile(result.path, req, res);
     } else if (result.type === 'redirect') {

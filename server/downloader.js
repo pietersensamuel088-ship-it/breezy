@@ -17,16 +17,26 @@ function sanitizeFilename(str) {
 /**
  * Searches local directory for an existing full song by BOTH title and artist
  */
-function findExistingTrack(dir, title, artist) {
+function findExistingTrack(dir, title, artist, songId) {
   if (!fs.existsSync(dir)) return null;
 
-  const baseTitle = title.replace(/\s*[\(\[](feat|ft|with)[\s\S]*?[\)\]]/gi, '').trim();
-  const baseArtist = artist.replace(/\s*(&|feat\.|ft\.|and).*$/i, '').trim();
+  // If specific ID is provided, check direct ID file first
+  if (songId) {
+    const cleanId = songId.replace(/[^a-zA-Z0-9_\-]/g, '_').toLowerCase();
+    for (const ext of ['.mp3', '.flac', '.m4a', '.wav']) {
+      const idPath = path.join(dir, `${cleanId}${ext}`);
+      if (fs.existsSync(idPath)) return idPath;
+    }
+  }
 
   const cleanArtist = artist.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const cleanBaseArtist = baseArtist.toLowerCase().replace(/[^a-z0-9]/g, '');
   const cleanTitle = title.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  const baseTitle = title.replace(/\s*[\(\[](?:feat\.?|ft\.?|with)[\s\S]*?[\)\]]/gi, '').trim();
   const cleanBaseTitle = baseTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  const baseArtist = artist.replace(/\s+(?:feat\.?|ft\.?|with|&|\band\b)\s+.*$/i, '').trim();
+  const cleanBaseArtist = baseArtist.toLowerCase().replace(/[^a-z0-9]/g, '');
 
   // 1. Direct specific file checks in root of dir
   const candidates = [
@@ -51,8 +61,10 @@ function findExistingTrack(dir, title, artist) {
       const lower = entry.name.toLowerCase();
       if (lower.endsWith('.mp3') || lower.endsWith('.flac') || lower.endsWith('.m4a') || lower.endsWith('.wav')) {
         const cleanName = lower.replace(/[^a-z0-9]/g, '');
-        const artistMatch = cleanName.includes(cleanArtist) || cleanName.includes(cleanBaseArtist);
-        const titleMatch = cleanName.includes(cleanTitle) || cleanName.includes(cleanBaseTitle);
+        const artistMatch = (cleanArtist.length >= 3 && cleanName.includes(cleanArtist)) ||
+                            (cleanBaseArtist.length >= 3 && cleanName.includes(cleanBaseArtist));
+        const titleMatch = (cleanTitle.length >= 3 && cleanName.includes(cleanTitle)) ||
+                           (cleanBaseTitle.length >= 3 && cleanName.includes(cleanBaseTitle));
         if (artistMatch && titleMatch) {
           return path.join(dir, entry.name);
         }
@@ -73,8 +85,10 @@ function findExistingTrack(dir, title, artist) {
         const lower = entry.name.toLowerCase();
         if (lower.endsWith('.mp3') || lower.endsWith('.flac') || lower.endsWith('.m4a') || lower.endsWith('.wav')) {
           const cleanName = lower.replace(/[^a-z0-9]/g, '');
-          const artistMatch = cleanArtist.length < 3 || cleanName.includes(cleanArtist) || cleanName.includes(cleanBaseArtist);
-          const titleMatch = cleanName.includes(cleanTitle) || cleanName.includes(cleanBaseTitle);
+          const artistMatch = (cleanArtist.length >= 3 && cleanName.includes(cleanArtist)) ||
+                              (cleanBaseArtist.length >= 3 && cleanName.includes(cleanBaseArtist));
+          const titleMatch = (cleanTitle.length >= 3 && cleanName.includes(cleanTitle)) ||
+                             (cleanBaseTitle.length >= 3 && cleanName.includes(cleanBaseTitle));
           if (artistMatch && titleMatch) {
             return fullPath;
           }
@@ -92,11 +106,11 @@ const inFlightDownloads = new Map();
 /**
  * Autonomously fetches and saves FULL master tracks directly on Proxmox disk (NO 30s previews)
  */
-export async function getOrDownloadTrack(title, artist) {
+export async function getOrDownloadTrack(title, artist, songId) {
   const cleanName = sanitizeFilename(`${artist}_${title}`);
   const targetMp3 = path.join(MUSIC_DIR, `${cleanName}.mp3`);
   const targetFlac = path.join(MUSIC_DIR, `${cleanName}.flac`);
-  const trackKey = `${artist}_${title}`.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const trackKey = `${songId ? songId + '_' : ''}${artist}_${title}`.toLowerCase().replace(/[^a-z0-9]/g, '');
 
   // 1. If already saved on Proxmox disk, return immediately! (<2ms)
   if (fs.existsSync(targetFlac)) {
@@ -109,7 +123,7 @@ export async function getOrDownloadTrack(title, artist) {
   }
 
   // 2. Search local storage / nicsongs subdirectories (requiring BOTH artist and title)
-  const localMatch = findExistingTrack(MUSIC_DIR, title, artist);
+  const localMatch = findExistingTrack(MUSIC_DIR, title, artist, songId);
   if (localMatch) {
     touchLru(localMatch);
     console.log(`[Proxmox Storage] Found local master track: ${localMatch}`);

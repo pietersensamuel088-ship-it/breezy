@@ -51,19 +51,29 @@ function cleanLruCache(songsDir: string, maxBytes = MAX_LRU_CACHE_BYTES) {
   }
 }
 
-function findLocalSong(title: string, artist: string): string | null {
+function findLocalSong(title: string, artist: string, songId?: string): string | null {
   const songsDir = path.resolve(__dirname, 'nicsongs');
   if (!fs.existsSync(songsDir)) return null;
 
-  const baseTitle = title.replace(/\s*[\(\[](feat|ft|with)[\s\S]*?[\)\]]/gi, '').trim();
-  const baseArtist = artist.replace(/\s*(&|feat\.|ft\.|and).*$/i, '').trim();
+  // If specific ID is provided, check direct ID file first
+  if (songId) {
+    const cleanId = songId.replace(/[^a-zA-Z0-9_\-]/g, '_').toLowerCase();
+    for (const ext of ['.mp3', '.flac', '.m4a', '.wav']) {
+      const idPath = path.join(songsDir, `${cleanId}${ext}`);
+      if (fs.existsSync(idPath)) return idPath;
+    }
+  }
 
   const cleanArtist = artist.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const cleanBaseArtist = baseArtist.toLowerCase().replace(/[^a-z0-9]/g, '');
   const cleanTitle = title.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  const baseTitle = title.replace(/\s*[\(\[](?:feat\.?|ft\.?|with)[\s\S]*?[\)\]]/gi, '').trim();
   const cleanBaseTitle = baseTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-  // 1. Direct specific file checks in root of nicsongs
+  const baseArtist = artist.replace(/\s+(?:feat\.?|ft\.?|with|&|\band\b)\s+.*$/i, '').trim();
+  const cleanBaseArtist = baseArtist.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  // 1. Direct exact filename check (Artist + Title)
   const candidates = [
     `${artist}_${title}`,
     `${artist}_${baseTitle}`,
@@ -79,15 +89,17 @@ function findLocalSong(title: string, artist: string): string | null {
     }
   }
 
-  // 2. Scan direct root files first (verified downloads)
+  // 2. Strict file scan (MUST have at least 3 chars match for BOTH artist and title to prevent collision)
   const rootEntries = fs.readdirSync(songsDir, { withFileTypes: true });
   for (const entry of rootEntries) {
     if (entry.isFile()) {
       const lower = entry.name.toLowerCase();
       if (lower.endsWith('.mp3') || lower.endsWith('.flac') || lower.endsWith('.m4a') || lower.endsWith('.wav')) {
         const cleanName = lower.replace(/[^a-z0-9]/g, '');
-        const artistMatch = cleanName.includes(cleanArtist) || cleanName.includes(cleanBaseArtist);
-        const titleMatch = cleanName.includes(cleanTitle) || cleanName.includes(cleanBaseTitle);
+        const artistMatch = (cleanArtist.length >= 3 && cleanName.includes(cleanArtist)) ||
+                            (cleanBaseArtist.length >= 3 && cleanName.includes(cleanBaseArtist));
+        const titleMatch = (cleanTitle.length >= 3 && cleanName.includes(cleanTitle)) ||
+                           (cleanBaseTitle.length >= 3 && cleanName.includes(cleanBaseTitle));
         if (artistMatch && titleMatch) {
           return path.join(songsDir, entry.name);
         }
@@ -108,8 +120,10 @@ function findLocalSong(title: string, artist: string): string | null {
         const lower = entry.name.toLowerCase();
         if (lower.endsWith('.mp3') || lower.endsWith('.flac') || lower.endsWith('.m4a') || lower.endsWith('.wav')) {
           const cleanName = lower.replace(/[^a-z0-9]/g, '');
-          const artistMatch = cleanName.includes(cleanArtist) || cleanName.includes(cleanBaseArtist);
-          const titleMatch = cleanName.includes(cleanTitle) || cleanName.includes(cleanBaseTitle);
+          const artistMatch = (cleanArtist.length >= 3 && cleanName.includes(cleanArtist)) ||
+                              (cleanBaseArtist.length >= 3 && cleanName.includes(cleanBaseArtist));
+          const titleMatch = (cleanTitle.length >= 3 && cleanName.includes(cleanTitle)) ||
+                             (cleanBaseTitle.length >= 3 && cleanName.includes(cleanBaseTitle));
           if (artistMatch && titleMatch) {
             return fullPath;
           }
@@ -188,14 +202,15 @@ function breezyAudioStreamerPlugin(): Plugin {
         }
 
         const url = new URL(req.url, 'http://127.0.0.1:5173');
+        const songId = url.searchParams.get('id') || '';
         const title = url.searchParams.get('title') || 'Under the Influence';
         const artist = url.searchParams.get('artist') || 'Chris Brown';
-        const trackKey = `${artist}_${title}`.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const trackKey = `${songId ? songId + '_' : ''}${artist}_${title}`.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-        console.log(`[Breezy Stream] Request for: "${artist} - ${title}"`);
+        console.log(`[Breezy Stream] Request for: "${artist} - ${title}" (ID: ${songId || 'none'})`);
 
         // 1. Check local LRU cache in nicsongs
-        let filePath = findLocalSong(title, artist);
+        let filePath = findLocalSong(title, artist, songId);
         if (filePath && fs.existsSync(filePath)) {
           touchLru(filePath);
           serveLocalRange(filePath, req, res);

@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import fs from 'fs';
 import { getOrDownloadTrack } from './downloader.js';
 import { streamAudioFile } from './streamer.js';
 import { pool, initDatabase } from './db.js';
@@ -37,10 +38,13 @@ app.get('/api/stream', async (req, res) => {
   try {
     // Proxmox server checks local disk or downloads autonomously
     const trackPath = await getOrDownloadTrack(String(title), String(artist));
+    if (!trackPath || !fs.existsSync(trackPath)) {
+      return res.status(404).send(`Track "${title}" by "${artist}" not found.`);
+    }
     streamAudioFile(trackPath, req, res);
   } catch (err) {
-    console.error('[Stream Error]', err);
-    res.status(500).send('Streaming error on Proxmox backend.');
+    console.error('[Stream Error]', err?.message || err);
+    res.status(500).send(`Streaming error on Proxmox backend: ${err?.message || err}`);
   }
 });
 

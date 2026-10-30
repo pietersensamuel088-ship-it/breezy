@@ -68,8 +68,11 @@ function breezyAudioStreamerPlugin(): Plugin {
 
           try {
             await new Promise<void>((resolve, reject) => {
-              const query = `${artist} ${title} official audio`;
-              exec(`yt-dlp -x --audio-format mp3 --audio-quality 0 "ytsearch1:${query}" -o "${targetMp3}"`, { timeout: 35000 }, (error) => {
+              const cleanArtist = artist.replace(/["'$`\\]/g, '');
+              const cleanTitle = title.replace(/["'$`\\]/g, '');
+              const query = `${cleanArtist} ${cleanTitle} official audio`;
+              const cmd = `yt-dlp --no-check-certificates --extractor-args "youtube:player_client=android,web" -x --audio-format mp3 --audio-quality 0 "ytsearch1:${query}" -o "${targetMp3}"`;
+              exec(cmd, { timeout: 60000 }, (error) => {
                 if (!error && fs.existsSync(targetMp3)) {
                   resolve();
                 } else {
@@ -87,16 +90,14 @@ function breezyAudioStreamerPlugin(): Plugin {
           }
         }
 
-        // 3. Fallback check
+        // 3. Check if local song matching the requested title exists
         if (!filePath || !fs.existsSync(filePath)) {
-          // If still missing, check first available track so the user ALWAYS hears music
-          const fallback = findLocalSong('Summer Too Hot') || findLocalSong('Heat');
-          if (fallback) filePath = fallback;
+          filePath = findLocalSong(title);
         }
 
         if (!filePath || !fs.existsSync(filePath)) {
           res.statusCode = 404;
-          res.end(JSON.stringify({ error: 'Track not found.' }));
+          res.end(JSON.stringify({ error: `Track "${title}" by "${artist}" not found.` }));
           return;
         }
 

@@ -62,10 +62,11 @@ export async function getOrDownloadTrack(title, artist) {
   console.log(`[Proxmox Downloader] Auto-fetching FULL studio master track: "${artist} - ${title}"...`);
 
   // 3. Headless Download via yt-dlp (Downloads 100% FULL UNABRIDGED SONG in high-bitrate)
-  return new Promise((resolve) => {
-    // Download full studio song directly from high-quality audio source
-    const query = `${artist} ${title} official audio`;
-    const command = `yt-dlp -x --audio-format mp3 --audio-quality 0 "ytsearch1:${query}" -o "${targetMp3}"`;
+  return new Promise((resolve, reject) => {
+    const cleanArtist = artist.replace(/["'$`\\]/g, '');
+    const cleanTitle = title.replace(/["'$`\\]/g, '');
+    const query = `${cleanArtist} ${cleanTitle} official audio`;
+    const command = `yt-dlp --no-check-certificates --extractor-args "youtube:player_client=android,web" -x --audio-format mp3 --audio-quality 0 "ytsearch1:${query}" -o "${targetMp3}"`;
 
     exec(command, { timeout: 60000 }, (error, stdout, stderr) => {
       if (!error && fs.existsSync(targetMp3)) {
@@ -73,8 +74,18 @@ export async function getOrDownloadTrack(title, artist) {
         resolve(targetMp3);
       } else {
         console.warn(`[Proxmox Downloader] yt-dlp notice:`, stderr || error?.message);
-        const fallback = findExistingTrack(MUSIC_DIR, 'Summer Too Hot') || findExistingTrack(MUSIC_DIR, 'Heat') || findExistingTrack(MUSIC_DIR, 'Under the Influence');
-        resolve(fallback || targetMp3);
+        // Check if file was saved under alternative name or if target exists
+        if (fs.existsSync(targetMp3)) {
+          resolve(targetMp3);
+        } else {
+          // Check if local track for this song exists
+          const local = findExistingTrack(MUSIC_DIR, title);
+          if (local) {
+            resolve(local);
+          } else {
+            reject(new Error(`Song "${title}" by "${artist}" could not be downloaded.`));
+          }
+        }
       }
     });
   });

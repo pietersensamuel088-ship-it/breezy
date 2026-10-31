@@ -3,7 +3,7 @@ import os from 'os';
 import path from 'path';
 import fs from 'fs';
 
-const DEFAULT_CLIENT_ID = '1182049870191296542'; // Breezy Music Application ID
+const DEFAULT_CLIENT_ID = '383226320970055681'; // Verified Universal Active RPC Application ID
 
 class DiscordRpc {
   constructor(clientId = DEFAULT_CLIENT_ID) {
@@ -147,27 +147,28 @@ class DiscordRpc {
     const now = Date.now();
     const remainingMs = Math.max(0, (act.duration - act.position) * 1000);
 
+    const activity = {
+      type: 2, // 2 = LISTENING to
+      details: (act.title || 'Master Track').slice(0, 128),
+      state: `by ${(act.artist || 'Unknown')}`.slice(0, 128),
+      timestamps: {
+        start: Math.round(now - (act.position * 1000)),
+        ...(act.duration > 0 ? { end: Math.round(now + remainingMs) } : {}),
+      },
+    };
+
+    if (act.coverUrl && act.coverUrl.startsWith('http')) {
+      activity.assets = {
+        large_image: act.coverUrl,
+        large_text: (act.album || 'Breezy Master Audio').slice(0, 128),
+      };
+    }
+
     const activityPayload = {
       cmd: 'SET_ACTIVITY',
       args: {
         pid: process.pid,
-        activity: {
-          details: act.title || 'Master Track',
-          state: `by ${act.artist || 'Unknown'}`,
-          timestamps: {
-            start: Math.round(now - (act.position * 1000)),
-            end: act.duration > 0 ? Math.round(now + remainingMs) : undefined,
-          },
-          assets: {
-            large_image: act.coverUrl && act.coverUrl.startsWith('http') ? act.coverUrl : 'breezy_logo',
-            large_text: act.album ? `${act.album} (Breezy 24-bit FLAC)` : 'Breezy // Master Audio',
-            small_image: 'breezy_logo',
-            small_text: 'Breezy Audiophile Stage',
-          },
-          buttons: [
-            { label: 'Listen on Breezy', url: 'https://github.com/pietersensamuel088-ship-it/breezy' }
-          ]
-        },
+        activity,
       },
       nonce: Math.random().toString(),
     };

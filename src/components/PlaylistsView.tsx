@@ -19,7 +19,7 @@ interface PlaylistsViewProps {
   playlists: Playlist[];
   currentSong: Song;
   isPlaying: boolean;
-  onPlaySong: (song: Song) => void;
+  onPlaySong: (song: Song, contextList?: Song[]) => void;
   onBack: () => void;
   onOpenCreate: () => void;
   onRefresh: () => void;
@@ -41,7 +41,7 @@ export function PlaylistsView({
   const handlePlayAll = (songs: Song[], shuffle = false) => {
     if (!songs || songs.length === 0) return;
     const list = shuffle ? [...songs].sort(() => Math.random() - 0.5) : songs;
-    onPlaySong(list[0]);
+    onPlaySong(list[0], list);
   };
 
   const handleDeletePlaylist = (playlistId: string) => {
@@ -170,7 +170,7 @@ export function PlaylistsView({
                 return (
                   <div
                     key={`${song.id}-${idx}`}
-                    onClick={() => onPlaySong(song)}
+                    onClick={() => onPlaySong(song, selectedPlaylist?.songs)}
                     className={`group flex items-center justify-between p-3 sm:px-4 rounded-2xl border transition-all cursor-pointer ${
                       isCurrent
                         ? 'bg-white/10 border-white/25 shadow-[0_0_20px_rgba(255,255,255,0.1)]'

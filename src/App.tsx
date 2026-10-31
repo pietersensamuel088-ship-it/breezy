@@ -139,6 +139,10 @@ export function App() {
   // Spotify-style Play History Stack for true historical rewind
   const [playHistoryStack, setPlayHistoryStack] = useState<Song[]>([]);
 
+  // Active Playback Context: tracks the exact list of songs the user is currently playing from
+  // (Prevents index mismatch, wrong-album jumps, and off-by-one queue shifts)
+  const [activeTracklist, setActiveTracklist] = useState<Song[]>(() => FEATURED_ALBUMS[0]?.songs || ALL_SONGS);
+
   // Spotify Liked Songs collection with persistent LocalStorage
   const [likedSongs, setLikedSongs] = useState<LikedSongItem[]>(() => {
     try {
@@ -429,7 +433,47 @@ export function App() {
     setIsPlaying((prev) => !prev);
   };
 
-  const playSong = (song: Song, shouldNavigateToAlbum = false, fromHistory = false) => {
+  const playSong = (
+    song: Song,
+    shouldNavigateToAlbum = false,
+    fromHistory = false,
+    explicitContextList?: Song[]
+  ) => {
+    // 1. Reset & Flush Old Audio State completely (Fix 4: Cached State / Old Player Instance)
+    const audio = audioRef.current;
+    if (audio) {
+      try {
+        audio.pause();
+        audio.removeAttribute('src');
+        audio.load();
+      } catch {}
+      loadedSongIdRef.current = song.id;
+      audio.src = song.audioUrl;
+      audio.currentTime = 0;
+      const p = audio.play();
+      if (p !== undefined) {
+        p.catch((err) => {
+          console.warn('[Instant Play Catch]', err);
+        });
+      }
+    }
+
+    // 2. Bind Active Tracklist Context (Fix 1: Index/ID Mismatch across UI lists)
+    if (explicitContextList && explicitContextList.length > 0) {
+      setActiveTracklist(explicitContextList);
+    } else if (cloudSearchResults.some((s) => s.id === song.id)) {
+      setActiveTracklist(cloudSearchResults);
+    } else if (filteredSongs && filteredSongs.some((s) => s.id === song.id)) {
+      setActiveTracklist(filteredSongs);
+    } else if (viewMode === 'liked' && likedSongs.some((s) => s.id === song.id)) {
+      setActiveTracklist(likedSongs);
+    } else if (selectedAlbum?.songs?.some((s) => s.id === song.id)) {
+      setActiveTracklist(selectedAlbum.songs);
+    }
+
+    // 3. Clear Clicked Track from Queue to Prevent Duplication (Fix 3: Corrupted / Off-by-One Queue Offset)
+    setQueue((prev) => prev.filter((s) => s.id !== song.id));
+
     // Spotify history stack: push current song if navigating to a new track and not from rewind
     if (!fromHistory && currentSong && currentSong.id !== song.id) {
       setPlayHistoryStack((prev) => {
@@ -443,33 +487,17 @@ export function App() {
       commitSongToHistory(currentSong);
     }
 
-    // Spotify Instant Playback: Trigger HTML5 Audio immediately in the user click event microtask
-    const audio = audioRef.current;
-    if (audio) {
-      if (loadedSongIdRef.current !== song.id) {
-        loadedSongIdRef.current = song.id;
-        audio.src = song.audioUrl;
-        audio.currentTime = 0;
-      }
-      const p = audio.play();
-      if (p !== undefined) {
-        p.catch((err) => {
-          console.warn('[Instant Play Catch]', err);
-        });
-      }
-    }
-
     setCurrentSong(song);
     setCurrentTime(0);
     setDuration(song.duration);
     setIsBuffering(true);
     setIsPlaying(true);
 
-    // Automatically navigate to the song's album
+    // 4. Strict Artist & Album Isolation: Only navigate album if BOTH artist and album match
     const matchingAlbumIdx = albums.findIndex(
-      (a) => a.title.toLowerCase() === song.album.toLowerCase() ||
-             a.id.toLowerCase().includes(song.album.toLowerCase()) ||
-             song.album.toLowerCase().includes(a.title.toLowerCase())
+      (a) => a.artist.toLowerCase() === song.artist.toLowerCase() &&
+             (a.title.toLowerCase() === song.album.toLowerCase() ||
+              a.songs.some((s) => s.id === song.id))
     );
 
     if (matchingAlbumIdx !== -1) {
@@ -477,7 +505,7 @@ export function App() {
     }
 
     // Go to album view if requested or clicked from recently played
-    if (shouldNavigateToAlbum) {
+    if (shouldNavigateToAlbum && matchingAlbumIdx !== -1) {
       setViewMode('album');
     }
   };
@@ -490,27 +518,51 @@ export function App() {
     holdDurationMs: 3000,
   });
 
-  // Upcoming Song Calculation (Prioritizes Queue, then Album Sequence, then Library)
+  // Upcoming Song Calculation (Prioritizes Queue, then Current Active List, then Album Sequence)
   const upcomingSong = useMemo(() => {
-    if (queue.length > 0) return queue[0];
-    const albumWithSong = albums.find((a) => a.songs.some((s) => s.id === currentSong.id)) || selectedAlbum;
-    if (!albumWithSong || albumWithSong.songs.length === 0) return null;
-    const curIdx = albumWithSong.songs.findIndex((s) => s.id === currentSong.id);
-    const nextIdx = (curIdx + 1) % albumWithSong.songs.length;
-    return albumWithSong.songs[nextIdx];
-  }, [queue, albums, selectedAlbum, currentSong.id]);
+    // Priority 1: User-curated queue
+    if (queue.length > 0) {
+      const nextInQueue = queue.find((s) => s.id !== currentSong.id);
+      if (nextInQueue) return nextInQueue;
+    }
+
+    // Priority 2: Current active tracklist context (Liked, Search, Playlist, or Album)
+    const activeList = activeTracklist && activeTracklist.length > 0 ? activeTracklist : selectedAlbum?.songs;
+    if (activeList && activeList.length > 0) {
+      const curIdx = activeList.findIndex((s) => s.id === currentSong.id);
+      if (curIdx !== -1 && activeList.length > 1) {
+        const nextIdx = (curIdx + 1) % activeList.length;
+        return activeList[nextIdx];
+      }
+    }
+
+    // Priority 3: Fallback to album sequence if song belongs to an album
+    const albumWithSong = albums.find((a) => a.songs.some((s) => s.id === currentSong.id));
+    if (albumWithSong && albumWithSong.songs.length > 0) {
+      const curIdx = albumWithSong.songs.findIndex((s) => s.id === currentSong.id);
+      if (curIdx !== -1) {
+        const nextIdx = (curIdx + 1) % albumWithSong.songs.length;
+        return albumWithSong.songs[nextIdx];
+      }
+    }
+
+    return null;
+  }, [queue, activeTracklist, selectedAlbum, currentSong.id, albums]);
 
   const handleNext = () => {
     if (upcomingSong) {
       if (queue.length > 0) {
-        setQueue((prev) => prev.slice(1));
+        setQueue((prev) => prev.filter((s) => s.id !== upcomingSong.id));
       }
-      playSong(upcomingSong);
+      playSong(upcomingSong, false, false, activeTracklist);
       return;
     }
-    const currentIndex = selectedAlbum.songs.findIndex(s => s.id === currentSong.id);
-    const nextSong = selectedAlbum.songs[(currentIndex + 1) % selectedAlbum.songs.length];
-    playSong(nextSong);
+    const activeList = activeTracklist && activeTracklist.length > 0 ? activeTracklist : selectedAlbum.songs;
+    const currentIndex = activeList.findIndex(s => s.id === currentSong.id);
+    if (currentIndex !== -1 && activeList.length > 1) {
+      const nextSong = activeList[(currentIndex + 1) % activeList.length];
+      playSong(nextSong, false, false, activeList);
+    }
   };
 
   // Spotify-Tier Predictive Lookahead Engine: Prefetches next upcoming song into browser cache & local proxy
@@ -545,14 +597,17 @@ export function App() {
     if (playHistoryStack.length > 0) {
       const prevSong = playHistoryStack[playHistoryStack.length - 1];
       setPlayHistoryStack((prev) => prev.slice(0, -1));
-      playSong(prevSong, false, true);
+      playSong(prevSong, false, true, activeTracklist);
       return;
     }
 
-    // Spotify Fallback: If no history exists, go to previous track in album or restart
-    const currentIndex = selectedAlbum.songs.findIndex(s => s.id === currentSong.id);
-    const prevIndex = (currentIndex - 1 + selectedAlbum.songs.length) % selectedAlbum.songs.length;
-    playSong(selectedAlbum.songs[prevIndex], false, true);
+    // Spotify Fallback: If no history exists, go to previous track in active list or restart
+    const activeList = activeTracklist && activeTracklist.length > 0 ? activeTracklist : selectedAlbum.songs;
+    const currentIndex = activeList.findIndex(s => s.id === currentSong.id);
+    if (currentIndex !== -1 && activeList.length > 1) {
+      const prevIndex = (currentIndex - 1 + activeList.length) % activeList.length;
+      playSong(activeList[prevIndex], false, true, activeList);
+    }
   };
 
   const handleSeekTime = (seekTime: number) => {
@@ -1032,11 +1087,11 @@ export function App() {
                   fontSize={0.9}
                   smoothing={110}
                   defaultActive={activeHistoryIndex !== -1 ? activeHistoryIndex : 0}
-                  onItemClick={(index) => {
-                    const selected = historySongs[index];
+                  onItemClick={(index, label) => {
+                    const selected = historySongs.find((s) => `${s.title} • ${s.album}` === label) || historySongs[index];
                     if (selected) {
                       // Stays at this index while playing, and automatically navigates to the album!
-                      playSong(selected, true);
+                      playSong(selected, true, false, historySongs);
                     }
                   }}
                 />
@@ -1083,7 +1138,11 @@ export function App() {
                     setSelectedAlbumIndex(index);
                   }}
                   onItemClick={(item, index) => {
-                    setSelectedAlbumIndex(index);
+                    const targetAlbum = albums.find((a) => a.id === item.albumId) || albums[index];
+                    const targetIdx = albums.findIndex((a) => a.id === targetAlbum.id);
+                    const finalIdx = targetIdx !== -1 ? targetIdx : index;
+                    setSelectedAlbumIndex(finalIdx);
+                    setActiveTracklist(albums[finalIdx]?.songs || []);
                     setViewMode('album');
                   }}
                   className="w-full h-full"
@@ -1100,7 +1159,7 @@ export function App() {
             currentSong={currentSong}
             isPlaying={isPlaying}
             currentUser={currentUser}
-            onPlaySong={(song) => playSong(song)}
+            onPlaySong={(song, context) => playSong(song, false, false, context)}
             onTogglePlay={togglePlay}
             onToggleLike={toggleLikeSong}
             onBack={() => setViewMode('home')}
@@ -1116,7 +1175,7 @@ export function App() {
             playlists={playlists}
             currentSong={currentSong}
             isPlaying={isPlaying}
-            onPlaySong={(song) => playSong(song)}
+            onPlaySong={(song, context) => playSong(song, false, false, context)}
             onBack={() => setViewMode('home')}
             onOpenCreate={() => {
               setSongForPlaylist(currentSong);
@@ -1157,7 +1216,7 @@ export function App() {
                 <button
                   onClick={() => {
                     if (selectedAlbum.songs.length > 0) {
-                      playSong(selectedAlbum.songs[0]);
+                      playSong(selectedAlbum.songs[0], false, false, selectedAlbum.songs);
                     }
                   }}
                   className="absolute inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 cursor-pointer"

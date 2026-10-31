@@ -15,7 +15,8 @@ release
 
 nicsongs/
 *.tsbuildinfo
-server/*.mp4
-server/*.webm
-server/*.m4a
-server/*.mp3
+*.mp4
+*.webm
+*.m4a
+*.mp3
+data/

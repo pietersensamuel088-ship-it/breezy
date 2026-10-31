@@ -25,7 +25,7 @@ interface LikedSongsViewProps {
   currentSong: Song;
   isPlaying: boolean;
   currentUser: string;
-  onPlaySong: (song: Song) => void;
+  onPlaySong: (song: Song, contextList?: Song[]) => void;
   onTogglePlay: () => void;
   onToggleLike: (song: Song) => void;
   onBack: () => void;
@@ -102,14 +102,15 @@ export const LikedSongsView: React.FC<LikedSongsViewProps> = ({
     if (isCurrentPlaylistPlaying) {
       onTogglePlay();
     } else {
-      onPlaySong(filteredList[0] || likedSongs[0]);
+      const targetList = filteredList.length > 0 ? filteredList : likedSongs;
+      onPlaySong(targetList[0], targetList);
     }
   };
 
   const handleShufflePlay = () => {
     if (likedSongs.length === 0) return;
-    const randomIdx = Math.floor(Math.random() * likedSongs.length);
-    onPlaySong(likedSongs[randomIdx]);
+    const shuffled = [...likedSongs].sort(() => Math.random() - 0.5);
+    onPlaySong(shuffled[0], shuffled);
   };
 
   return (
@@ -244,7 +245,7 @@ export const LikedSongsView: React.FC<LikedSongsViewProps> = ({
             return (
               <div
                 key={song.id}
-                {...(holdHandlers || { onClick: () => onPlaySong(song) })}
+                onClick={() => onPlaySong(song, filteredList)}
                 onMouseEnter={(e) => {
                   setHoveredIdx(idx);
                   holdHandlers?.onMouseEnter?.(e);

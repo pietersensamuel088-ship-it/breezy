@@ -193,6 +193,20 @@ function breezyAudioStreamerPlugin(): Plugin {
     name: 'breezy-audio-streamer',
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
+        if (req.url?.startsWith('/api/health')) {
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.end(JSON.stringify({
+            status: 'online',
+            service: 'Breezy Master Streamer',
+            version: '1.0.0',
+            mode: 'on-demand-autonomous',
+            timestamp: new Date().toISOString()
+          }));
+          return;
+        }
+
         if (!req.url?.startsWith('/api/stream')) {
           return next();
         }

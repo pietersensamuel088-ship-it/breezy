@@ -1,6 +1,7 @@
 const { app, BrowserWindow, shell, ipcMain } = require('electron');
 const path = require('path');
 const { exec } = require('child_process');
+const { startEmbeddedStreamer } = require('./embeddedServer.cjs');
 
 // Chromium hardware acceleration & zero-stutter background audio playback flags
 app.commandLine.appendSwitch('enable-gpu-rasterization');
@@ -33,22 +34,33 @@ function createWindow() {
   const devUrl = 'http://127.0.0.1:5173';
   const distPath = path.join(__dirname, '../dist/index.html');
 
-  // Check if live dev server is active on 5173 for instantaneous updates
+  // Connect to local stream server (either Vite dev or embedded streamer)
   const http = require('http');
-  const req = http.get(devUrl, (res) => {
-    if (res.statusCode === 200) {
-      mainWindow.loadURL(devUrl);
-    } else {
-      mainWindow.loadFile(distPath);
-    }
-  });
-  req.on('error', () => {
-    mainWindow.loadFile(distPath);
-  });
-  req.setTimeout(800, () => {
-    req.destroy();
-    mainWindow.loadFile(distPath);
-  });
+  const tryLoad = (retries = 3) => {
+    const req = http.get(devUrl, (res) => {
+      if (res.statusCode === 200) {
+        mainWindow.loadURL(devUrl);
+      } else {
+        mainWindow.loadFile(distPath);
+      }
+    });
+    req.on('error', () => {
+      if (retries > 0) {
+        setTimeout(() => tryLoad(retries - 1), 150);
+      } else {
+        mainWindow.loadFile(distPath);
+      }
+    });
+    req.setTimeout(800, () => {
+      req.destroy();
+      if (retries > 0) {
+        setTimeout(() => tryLoad(retries - 1), 150);
+      } else {
+        mainWindow.loadFile(distPath);
+      }
+    });
+  };
+  tryLoad();
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
@@ -105,6 +117,14 @@ ipcMain.handle('app-update-and-restart', async () => {
 });
 
 app.whenReady().then(() => {
+  const distDir = path.join(__dirname, '../dist');
+  const songsDir = path.resolve(__dirname, '../nicsongs');
+  try {
+    startEmbeddedStreamer(5173, distDir, songsDir);
+  } catch (e) {
+    console.warn('[Embedded Streamer Init]', e.message);
+  }
+
   createWindow();
 
   app.on('activate', () => {

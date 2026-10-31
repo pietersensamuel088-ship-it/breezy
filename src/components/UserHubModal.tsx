@@ -98,8 +98,20 @@ export function UserHubModal({ isOpen, onClose, currentUser, onSwitchUser }: Use
 
   const handleSaveBackendUrl = () => {
     const clean = backendUrl.trim().replace(/\/+$/, '');
-    localStorage.setItem('breezy_backend_url', clean);
-    testBackendConnection(clean);
+    if (clean) {
+      localStorage.setItem('breezy_backend_url', clean);
+    } else {
+      localStorage.removeItem('breezy_backend_url');
+    }
+    testBackendConnection(clean || 'http://127.0.0.1:5173');
+    window.dispatchEvent(new Event('breezy-backend-changed'));
+  };
+
+  const handleResetDefault = () => {
+    localStorage.removeItem('breezy_backend_url');
+    setBackendUrl('http://127.0.0.1:5173');
+    testBackendConnection('http://127.0.0.1:5173');
+    window.dispatchEvent(new Event('breezy-backend-changed'));
   };
 
   const downloadLauncher = () => {
@@ -236,6 +248,36 @@ pause
               className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs font-mono text-white font-semibold transition-all cursor-pointer whitespace-nowrap"
             >
               Save & Ping
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => {
+                setBackendUrl('http://127.0.0.1:5173');
+                testBackendConnection('http://127.0.0.1:5173');
+              }}
+              className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[10px] font-mono text-zinc-300 transition-colors"
+            >
+              Default (127.0.0.1:5173)
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setBackendUrl('http://127.0.0.1:5050');
+                testBackendConnection('http://127.0.0.1:5050');
+              }}
+              className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[10px] font-mono text-zinc-300 transition-colors"
+            >
+              Proxmox Port 5050
+            </button>
+            <button
+              type="button"
+              onClick={handleResetDefault}
+              className="ml-auto text-[10px] font-mono text-zinc-500 hover:text-white transition-colors underline"
+            >
+              Reset to Default
             </button>
           </div>
         </div>

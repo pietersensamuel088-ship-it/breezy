@@ -44,7 +44,8 @@ import {
   Loader2,
   Radio,
   ListMusic,
-  Heart
+  Heart,
+  Server
 } from 'lucide-react';
 
 export function App() {
@@ -192,6 +193,110 @@ export function App() {
       return [song, ...filtered];
     });
   };
+
+  // Proxmox / Audio Server Connection Health Monitor
+  const [backendStatus, setBackendStatus] = useState<'online' | 'offline' | 'checking'>('checking');
+
+  const checkBackendHealth = useCallback(async () => {
+    try {
+      const custom = typeof window !== 'undefined' ? localStorage.getItem('breezy_backend_url') : null;
+      const target = (custom && custom.trim()) ? custom.trim().replace(/\/+$/, '') : (window.location.origin.includes('http') ? window.location.origin : 'http://127.0.0.1:5173');
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 2500);
+      const res = await fetch(`${target}/api/health`, { signal: ctrl.signal }).catch(() => null);
+      clearTimeout(t);
+      if (res && res.ok) {
+        setBackendStatus('online');
+      } else {
+        const ctrl2 = new AbortController();
+        const t2 = setTimeout(() => ctrl2.abort(), 1500);
+        const res5050 = await fetch('http://127.0.0.1:5050/api/health', { signal: ctrl2.signal }).catch(() => null);
+        clearTimeout(t2);
+        if (res5050 && res5050.ok) {
+          setBackendStatus('online');
+        } else {
+          setBackendStatus('offline');
+        }
+      }
+    } catch {
+      setBackendStatus('offline');
+    }
+  }, []);
+
+  useEffect(() => {
+    checkBackendHealth();
+    const interval = setInterval(checkBackendHealth, 15000);
+    const onBackendChanged = () => checkBackendHealth();
+    window.addEventListener('breezy-backend-changed', onBackendChanged);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('breezy-backend-changed', onBackendChanged);
+    };
+  }, [checkBackendHealth]);
+
+  // Audio Stream Error & Auto-Failover Handler
+  const handleAudioError = useCallback((e?: any) => {
+    console.error('[Breezy Audio Player Error]', e);
+    setIsBuffering(false);
+
+    const audio = audioRef.current;
+    if (!audio) {
+      setIsPlaying(false);
+      return;
+    }
+
+    const currentSrc = audio.src;
+    const customBackend = typeof window !== 'undefined' ? localStorage.getItem('breezy_backend_url') : null;
+
+    // Failover 1: If custom backend failed, fallback to local origin
+    if (customBackend && currentSrc.includes(customBackend)) {
+      console.warn('[Breezy Stream] Custom Proxmox server failed, falling back to local origin...');
+      const fallbackUrl = currentSrc.replace(customBackend, window.location.origin || 'http://127.0.0.1:5173');
+      audio.src = fallbackUrl;
+      audio.play().catch(() => {});
+      return;
+    }
+
+    // Failover 2: If 5173 failed, try 5050
+    if (currentSrc.includes(':5173/api/stream')) {
+      console.warn('[Breezy Stream] Port 5173 failed, attempting failover to port 5050...');
+      const fallback5050 = currentSrc.replace(':5173/api/stream', ':5050/api/stream');
+      audio.src = fallback5050;
+      audio.play().catch(() => {});
+      return;
+    }
+
+    // Failover 3: If 5050 failed, try 5173
+    if (currentSrc.includes(':5050/api/stream')) {
+      console.warn('[Breezy Stream] Port 5050 failed, attempting failover to port 5173...');
+      const fallback5173 = currentSrc.replace(':5050/api/stream', ':5173/api/stream');
+      audio.src = fallback5173;
+      audio.play().catch(() => {});
+      return;
+    }
+
+    setIsPlaying(false);
+  }, []);
+
+  // Safety Watchdog: Prevent infinite loading spinners if a stream stalls
+  const bufferingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  useEffect(() => {
+    if (isBuffering) {
+      bufferingTimeoutRef.current = setTimeout(() => {
+        if (isBuffering && audioRef.current && audioRef.current.paused) {
+          console.warn('[Breezy Stream] Buffering timeout (12s) - attempting failover...');
+          handleAudioError(new Error('Buffering timeout'));
+        }
+      }, 12000);
+    } else {
+      if (bufferingTimeoutRef.current) {
+        clearTimeout(bufferingTimeoutRef.current);
+      }
+    }
+    return () => {
+      if (bufferingTimeoutRef.current) clearTimeout(bufferingTimeoutRef.current);
+    };
+  }, [isBuffering, handleAudioError]);
 
 
 
@@ -746,6 +851,36 @@ export function App() {
 
         {/* Action Controls */}
         <div className="flex items-center gap-3">
+          {/* Proxmox / Audio Server Status Pill */}
+          <button
+            onClick={() => setIsUserHubOpen(true)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[11px] font-mono transition-all cursor-pointer ${
+              backendStatus === 'online'
+                ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400 hover:bg-emerald-500/20'
+                : backendStatus === 'offline'
+                ? 'bg-rose-500/10 border-rose-500/25 text-rose-400 hover:bg-rose-500/20'
+                : 'bg-amber-500/10 border-amber-500/25 text-amber-400 hover:bg-amber-500/20'
+            }`}
+            title="Audio Server / Proxmox Status (Click to Configure)"
+          >
+            <span
+              className={`w-2 h-2 rounded-full ${
+                backendStatus === 'online'
+                  ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]'
+                  : backendStatus === 'offline'
+                  ? 'bg-rose-400 animate-pulse'
+                  : 'bg-amber-400 animate-ping'
+              }`}
+            />
+            <span className="hidden md:inline font-semibold">
+              {backendStatus === 'online'
+                ? 'PROXMOX ONLINE'
+                : backendStatus === 'offline'
+                ? 'PROXMOX OFFLINE'
+                : 'CHECKING...'}
+            </span>
+          </button>
+
           {currentUser && (
             <button
               onClick={() => setIsUserHubOpen(true)}
@@ -1647,10 +1782,7 @@ export function App() {
             setDuration(audioRef.current.duration);
           }
         }}
-        onError={(e) => {
-          console.error('[Breezy Audio Player Error]', e);
-          setIsBuffering(false);
-        }}
+        onError={handleAudioError}
       />
     </div>
   );

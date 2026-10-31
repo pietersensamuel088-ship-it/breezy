@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowRight, Music2, UserCheck, Sparkles } from 'lucide-react';
+import { ArrowRight, Music2, X } from 'lucide-react';
 
 interface WelcomeOverlayProps {
   isOpen: boolean;
@@ -12,58 +12,90 @@ export function WelcomeOverlay({ isOpen, onComplete, savedUsername }: WelcomeOve
   const [username, setUsername] = useState<string>(savedUsername || '');
   const [displayedText, setDisplayedText] = useState<string>('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
+
+  const hasCompletedRef = useRef(false);
+
+  const finish = (name: string) => {
+    if (hasCompletedRef.current) return;
+    hasCompletedRef.current = true;
+    setStage('fading');
+    setTimeout(() => {
+      onCompleteRef.current(name.trim() || 'Guest');
+    }, 300);
+  };
 
   useEffect(() => {
     if (isOpen) {
+      hasCompletedRef.current = false;
       const stored = localStorage.getItem('breezy_username');
       if (stored && stored.trim()) {
         setUsername(stored.trim());
-        // For returning users, immediately trigger the Apple-style cursive "Welcome back, {name}"!
         setStage('writing');
       } else {
         setStage('input');
         setUsername('');
         const timer = setTimeout(() => {
           inputRef.current?.focus();
-        }, 150);
+        }, 100);
         return () => clearTimeout(timer);
       }
     }
   }, [isOpen]);
 
-  // Apple-style Cursive Handwriting Effect
+  // Cursive handwriting animation with guaranteed termination and safety timeout
   useEffect(() => {
-    if (stage === 'writing') {
-      const isReturning = Boolean(localStorage.getItem('breezy_username'));
-      const activeName = username.trim() || 'Guest';
-      const fullText = isReturning ? `Welcome back, ${activeName}` : `Welcome, ${activeName}`;
+    if (!isOpen || stage !== 'writing') return;
 
-      let index = 0;
-      setDisplayedText('');
+    const isReturning = Boolean(localStorage.getItem('breezy_username'));
+    const activeName = (username || localStorage.getItem('breezy_username') || 'Guest').trim();
+    const fullText = isReturning ? `Welcome back, ${activeName}` : `Welcome, ${activeName}`;
 
-      const interval = setInterval(() => {
-        index++;
-        setDisplayedText(fullText.slice(0, index));
-        if (index >= fullText.length) {
-          clearInterval(interval);
-          // Hold for 1.3 seconds so user enjoys the Apple-style calligraphy glow
-          setTimeout(() => {
-            setStage('fading');
-            setTimeout(() => {
-              onComplete(activeName);
-            }, 650);
-          }, 1300);
-        }
-      }, 65); // Fluid handwriting tempo
+    let index = 0;
+    setDisplayedText('');
 
-      return () => clearInterval(interval);
-    }
-  }, [stage, username, onComplete]);
+    // Safety fallback: if anything stalls, force finish in 2.2 seconds max!
+    const safetyTimer = setTimeout(() => {
+      finish(activeName);
+    }, 2200);
+
+    const interval = setInterval(() => {
+      index++;
+      setDisplayedText(fullText.slice(0, index));
+      if (index >= fullText.length) {
+        clearInterval(interval);
+        setTimeout(() => {
+          finish(activeName);
+        }, 600);
+      }
+    }, 45);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(safetyTimer);
+    };
+  }, [isOpen, stage]);
+
+  // Keyboard shortcut: Esc or Enter instantly dismisses
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        const activeName = (username || localStorage.getItem('breezy_username') || 'Guest').trim();
+        finish(activeName);
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [isOpen, username]);
 
   const handleSignIn = (e: React.FormEvent) => {
     e.preventDefault();
     const finalName = username.trim() || 'Guest';
-    localStorage.setItem('breezy_username', finalName);
+    try {
+      localStorage.setItem('breezy_username', finalName);
+    } catch {}
     setUsername(finalName);
     setStage('writing');
   };
@@ -72,17 +104,40 @@ export function WelcomeOverlay({ isOpen, onComplete, savedUsername }: WelcomeOve
 
   return (
     <div
-      className={`fixed inset-0 z-[100] flex items-center justify-center bg-[#040507] transition-all duration-700 ${
-        stage === 'fading' ? 'opacity-0 scale-105 pointer-events-none' : 'opacity-100 scale-100'
+      onClick={() => {
+        if (stage === 'writing') {
+          const activeName = (username || localStorage.getItem('breezy_username') || 'Guest').trim();
+          finish(activeName);
+        }
+      }}
+      className={`fixed inset-0 z-[100] flex items-center justify-center bg-[#040507] transition-all duration-500 cursor-pointer ${
+        stage === 'fading' ? 'opacity-0 pointer-events-none' : 'opacity-100'
       }`}
     >
       {/* Background Ambient Glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[750px] h-[550px] bg-blue-600/10 rounded-full blur-[170px] pointer-events-none" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[750px] h-[550px] bg-red-600/10 rounded-full blur-[170px] pointer-events-none" />
       <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[420px] h-[420px] bg-white/[0.04] rounded-full blur-[130px] pointer-events-none" />
+
+      {/* Skip Button in Top Right */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          const activeName = (username || localStorage.getItem('breezy_username') || 'Guest').trim();
+          finish(activeName);
+        }}
+        className="absolute top-6 right-6 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-mono text-zinc-400 hover:text-white transition-all cursor-pointer"
+        title="Skip intro"
+      >
+        <span>Skip</span>
+        <X className="w-3.5 h-3.5" />
+      </button>
 
       {/* STAGE 1: REAL PRODUCTION SIGN IN */}
       {stage === 'input' && (
-        <div className="relative z-10 w-full max-w-md mx-4 p-8 sm:p-10 rounded-3xl bg-white/[0.02] border border-white/10 backdrop-blur-2xl shadow-[0_30px_90px_rgba(0,0,0,0.95)] flex flex-col items-center text-center animate-fadeIn">
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="relative z-10 w-full max-w-md mx-4 p-8 sm:p-10 rounded-3xl bg-white/[0.02] border border-white/10 backdrop-blur-2xl shadow-[0_30px_90px_rgba(0,0,0,0.95)] flex flex-col items-center text-center animate-fadeIn cursor-default"
+        >
           {/* Logo Badge */}
           <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-6 shadow-inner">
             <Music2 className="w-8 h-8 text-white" />
@@ -134,7 +189,7 @@ export function WelcomeOverlay({ isOpen, onComplete, savedUsername }: WelcomeOve
                 filter: 'drop-shadow(0 0 30px rgba(255,255,255,0.85))',
               }}
             >
-              {displayedText}
+              {displayedText || 'Welcome to Breezy'}
               {stage === 'writing' && (
                 <span className="inline-block w-1.5 h-12 sm:h-16 md:h-20 bg-white ml-2 align-middle animate-pulse rounded-full shadow-[0_0_15px_#ffffff]" />
               )}
@@ -144,6 +199,9 @@ export function WelcomeOverlay({ isOpen, onComplete, savedUsername }: WelcomeOve
           <p className="mt-8 text-xs font-mono tracking-[0.3em] uppercase text-zinc-400 opacity-80 animate-pulse">
             // MASTER AUDIO STAGE ONLINE
           </p>
+          <span className="mt-3 text-[10px] font-mono text-zinc-600">
+            Click anywhere or press Esc to enter
+          </span>
         </div>
       )}
     </div>

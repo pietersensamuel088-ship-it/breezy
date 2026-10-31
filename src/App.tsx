@@ -62,9 +62,15 @@ export function App() {
 
   // User Identity & Welcome State
   const [currentUser, setCurrentUser] = useState<string>(
-    () => localStorage.getItem('breezy_username') || 'Guest'
+    () => (typeof window !== 'undefined' ? localStorage.getItem('breezy_username') || 'Guest' : 'Guest')
   );
-  const [isWelcomeOpen, setIsWelcomeOpen] = useState<boolean>(true);
+  const [isWelcomeOpen, setIsWelcomeOpen] = useState<boolean>(
+    () => (typeof window !== 'undefined' ? !localStorage.getItem('breezy_username') : false)
+  );
+  const handleWelcomeComplete = useCallback((name: string) => {
+    setCurrentUser(name);
+    setIsWelcomeOpen(false);
+  }, []);
   const [isUserHubOpen, setIsUserHubOpen] = useState<boolean>(false);
   const [hasGitHubUpdate, setHasGitHubUpdate] = useState<boolean>(false);
   const [latestGitHubCommit, setLatestGitHubCommit] = useState<GitHubCommitInfo | null>(null);
@@ -161,6 +167,7 @@ export function App() {
 
   const selectedAlbum = albums[selectedAlbumIndex] || albums[0];
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const loadedSongIdRef = useRef<string>('');
 
   // Map albums to React Bits CircularCarousel items
   const carouselItems: CarouselItem[] = albums.map((alb) => ({
@@ -236,14 +243,9 @@ export function App() {
 
   // Audio Stream Error & Auto-Failover Handler
   const handleAudioError = useCallback((e?: any) => {
-    console.error('[Breezy Audio Player Error]', e);
-    setIsBuffering(false);
-
+    console.warn('[Breezy Audio Player Warning]', e);
     const audio = audioRef.current;
-    if (!audio) {
-      setIsPlaying(false);
-      return;
-    }
+    if (!audio) return;
 
     const currentSrc = audio.src;
     const customBackend = typeof window !== 'undefined' ? localStorage.getItem('breezy_backend_url') : null;
@@ -257,16 +259,7 @@ export function App() {
       return;
     }
 
-    // Failover 2: If 5173 failed, try 5050
-    if (currentSrc.includes(':5173/api/stream')) {
-      console.warn('[Breezy Stream] Port 5173 failed, attempting failover to port 5050...');
-      const fallback5050 = currentSrc.replace(':5173/api/stream', ':5050/api/stream');
-      audio.src = fallback5050;
-      audio.play().catch(() => {});
-      return;
-    }
-
-    // Failover 3: If 5050 failed, try 5173
+    // Failover 2: If 5050 failed, try 5173
     if (currentSrc.includes(':5050/api/stream')) {
       console.warn('[Breezy Stream] Port 5050 failed, attempting failover to port 5173...');
       const fallback5173 = currentSrc.replace(':5050/api/stream', ':5173/api/stream');
@@ -275,7 +268,16 @@ export function App() {
       return;
     }
 
-    setIsPlaying(false);
+    // Failover 3: If 5173 failed, try 5050
+    if (currentSrc.includes(':5173/api/stream')) {
+      console.warn('[Breezy Stream] Port 5173 failed, attempting failover to port 5050...');
+      const fallback5050 = currentSrc.replace(':5173/api/stream', ':5050/api/stream');
+      audio.src = fallback5050;
+      audio.play().catch(() => {});
+      return;
+    }
+
+    setIsBuffering(false);
   }, []);
 
   // Safety Watchdog: Prevent infinite loading spinners if a stream stalls
@@ -284,10 +286,10 @@ export function App() {
     if (isBuffering) {
       bufferingTimeoutRef.current = setTimeout(() => {
         if (isBuffering && audioRef.current && audioRef.current.paused) {
-          console.warn('[Breezy Stream] Buffering timeout (12s) - attempting failover...');
+          console.warn('[Breezy Stream] Buffering timeout (35s) - attempting failover...');
           handleAudioError(new Error('Buffering timeout'));
         }
-      }, 12000);
+      }, 35000);
     } else {
       if (bufferingTimeoutRef.current) {
         clearTimeout(bufferingTimeoutRef.current);
@@ -298,25 +300,15 @@ export function App() {
     };
   }, [isBuffering, handleAudioError]);
 
-
-
   // Master Audio Sync Effect: Keeps audio state synchronized with React without wiping buffer
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    const targetUrl = currentSong.audioUrl;
-    let needsSourceChange = false;
-    try {
-      const parsedDesired = new URL(targetUrl, window.location.origin).href;
-      needsSourceChange = audio.src !== parsedDesired;
-    } catch {
-      needsSourceChange = !audio.src.includes(encodeURIComponent(currentSong.title));
-    }
-
-    if (needsSourceChange) {
+    if (loadedSongIdRef.current !== currentSong.id) {
+      loadedSongIdRef.current = currentSong.id;
       setIsBuffering(true);
-      audio.src = targetUrl;
+      audio.src = currentSong.audioUrl;
       audio.currentTime = 0;
     }
 
@@ -423,14 +415,8 @@ export function App() {
     // Spotify Instant Playback: Trigger HTML5 Audio immediately in the user click event microtask
     const audio = audioRef.current;
     if (audio) {
-      let needsChange = false;
-      try {
-        const parsedDesired = new URL(song.audioUrl, window.location.origin).href;
-        needsChange = audio.src !== parsedDesired;
-      } catch {
-        needsChange = true;
-      }
-      if (needsChange) {
+      if (loadedSongIdRef.current !== song.id) {
+        loadedSongIdRef.current = song.id;
         audio.src = song.audioUrl;
         audio.currentTime = 0;
       }
@@ -1718,10 +1704,7 @@ export function App() {
       {/* APPLE-STYLE CURSIVE WELCOME SIGN-IN OVERLAY */}
       <WelcomeOverlay
         isOpen={isWelcomeOpen}
-        onComplete={(name) => {
-          setCurrentUser(name);
-          setIsWelcomeOpen(false);
-        }}
+        onComplete={handleWelcomeComplete}
       />
 
       {/* SPOTIFY-TIER PLAY QUEUE POPOVER */}

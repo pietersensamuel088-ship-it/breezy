@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { spawn, execSync } from 'child_process';
 import { Readable } from 'stream';
+import { discordRpc } from './server/discordRpc.js';
 
 let currentGitSha = '3fa3f5c';
 try {
@@ -204,6 +205,42 @@ function breezyAudioStreamerPlugin(): Plugin {
             mode: 'on-demand-autonomous',
             timestamp: new Date().toISOString()
           }));
+          return;
+        }
+
+        // Discord Rich Presence Endpoints
+        if (req.url?.startsWith('/api/discord/presence')) {
+          if (req.method === 'OPTIONS') {
+            res.statusCode = 204;
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+            res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
+            res.end();
+            return;
+          }
+
+          if (req.method === 'POST') {
+            let body = '';
+            req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+            req.on('end', () => {
+              try {
+                const data = JSON.parse(body);
+                discordRpc.setActivity(data);
+              } catch {}
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'application/json');
+              res.setHeader('Access-Control-Allow-Origin', '*');
+              res.end(JSON.stringify({ success: true, connected: discordRpc.isConnected }));
+            });
+            return;
+          }
+        }
+
+        if (req.url?.startsWith('/api/discord/status')) {
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.end(JSON.stringify({ connected: discordRpc.isConnected }));
           return;
         }
 

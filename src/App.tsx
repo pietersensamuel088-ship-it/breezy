@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { FEATURED_ALBUMS, ALL_SONGS } from './mockData';
-import { Album, Song } from './types';
+import { Album, Song, Playlist } from './types';
 import { CircularCarousel, CarouselItem } from './components/CircularCarousel';
 import { CometDial } from './components/CometDial';
 import { LineSidebar } from './components/LineSidebar';
@@ -14,11 +14,16 @@ import { UpdateNotificationBanner } from './components/UpdateNotificationBanner'
 import { QueuePopover } from './components/QueuePopover';
 import { LightningEffect } from './components/LightningEffect';
 import { LikedSongsView, LikedSongItem } from './components/LikedSongsView';
+import { PlaylistsView } from './components/PlaylistsView';
+import { AddToPlaylistModal } from './components/AddToPlaylistModal';
+import { MiniPlayer } from './components/MiniPlayer';
 import { useHoldToQueue } from './utils/useHoldToQueue';
 import { useMediaSession } from './utils/useMediaSession';
 import { checkForGitHubUpdate, GitHubCommitInfo } from './utils/githubUpdater';
 import { audioSynth } from './utils/audioSynthesizer';
 import { fuzzySearchSongs, searchCloudMusic } from './utils/songSearchEngine';
+import { getStoredPlaylists } from './utils/playlistManager';
+import { updateDiscordPresence } from './utils/discordBridge';
 import {
   Play,
   Pause,
@@ -45,7 +50,9 @@ import {
   Radio,
   ListMusic,
   Heart,
-  Server
+  Server,
+  ListPlus,
+  PictureInPicture2
 } from 'lucide-react';
 
 export function App() {
@@ -88,10 +95,12 @@ export function App() {
       if (res.hasUpdate) {
         setHasGitHubUpdate(true);
         setLatestGitHubCommit(res.latestCommit);
+      } else {
+        setHasGitHubUpdate(false);
       }
     };
     checkUpdate();
-    const interval = setInterval(checkUpdate, 60000);
+    const interval = setInterval(checkUpdate, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -116,8 +125,16 @@ export function App() {
   const dragStartRef = useRef<{ mouseX: number; mouseY: number; startX: number; startY: number } | null>(null);
   const volumeLeaveTimeout = useRef<number | null>(null);
 
-  // View state: 'home' (Pure Fullscreen Carousel) vs 'album' (Split detail track view) vs 'liked' (Spotify Liked Songs List)
-  const [viewMode, setViewMode] = useState<'home' | 'album' | 'liked'>('home');
+  // View state: 'home' | 'album' | 'liked' | 'playlists'
+  const [viewMode, setViewMode] = useState<'home' | 'album' | 'liked' | 'playlists'>('home');
+
+  // Mini-Player floating state
+  const [isMiniPlayerOpen, setIsMiniPlayerOpen] = useState<boolean>(false);
+
+  // Custom User Playlists State
+  const [playlists, setPlaylists] = useState<Playlist[]>(getStoredPlaylists);
+  const [isAddToPlaylistOpen, setIsAddToPlaylistOpen] = useState<boolean>(false);
+  const [songForPlaylist, setSongForPlaylist] = useState<Song | null>(null);
 
   // Spotify-style Play History Stack for true historical rewind
   const [playHistoryStack, setPlayHistoryStack] = useState<Song[]>([]);
@@ -240,6 +257,20 @@ export function App() {
       window.removeEventListener('breezy-backend-changed', onBackendChanged);
     };
   }, [checkBackendHealth]);
+
+  // Discord Rich Presence Broadcaster (Works for both Browser & Desktop)
+  useEffect(() => {
+    updateDiscordPresence(currentSong, isPlaying, currentTime, duration);
+  }, [currentSong, isPlaying, Math.floor(currentTime / 4), duration]);
+
+  // Custom Playlists Update Listener
+  useEffect(() => {
+    const handlePlaylistsUpdated = (e: any) => {
+      setPlaylists(e.detail || getStoredPlaylists());
+    };
+    window.addEventListener('breezy-playlists-updated', handlePlaylistsUpdated);
+    return () => window.removeEventListener('breezy-playlists-updated', handlePlaylistsUpdated);
+  }, []);
 
   // Audio Stream Error & Auto-Failover Handler
   const handleAudioError = useCallback((e?: any) => {
@@ -524,12 +555,16 @@ export function App() {
     playSong(selectedAlbum.songs[prevIndex], false, true);
   };
 
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const seekTime = parseFloat(e.target.value);
+  const handleSeekTime = (seekTime: number) => {
     setCurrentTime(seekTime);
     if (audioRef.current) {
       audioRef.current.currentTime = seekTime;
     }
+  };
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const seekTime = parseFloat(e.target.value);
+    handleSeekTime(seekTime);
   };
 
   // System-level Windows Media Session integration (HUD, Lock Screen, Keyboard & Headset Media Keys)
@@ -594,12 +629,16 @@ export function App() {
       } else if (e.key === 'q' || e.key === 'Q') {
         e.preventDefault();
         setIsQueueOpen((prev) => !prev);
+      } else if (e.key === 'p' || e.key === 'P') {
+        e.preventDefault();
+        setIsMiniPlayerOpen((prev) => !prev);
       } else if (e.key === 'Escape') {
         setIsDownloaderOpen(false);
         setIsLyricsOpen(false);
         setIsSongDetailOpen(false);
         setIsUserHubOpen(false);
         setIsQueueOpen(false);
+        setIsAddToPlaylistOpen(false);
         if (viewMode !== 'home') {
           setViewMode('home');
         }
@@ -914,7 +953,33 @@ export function App() {
             </span>
           </button>
 
-          {(viewMode === 'album' || viewMode === 'liked' || searchQuery.trim() !== '') && (
+          {/* Custom User Playlists Pill */}
+          <button
+            onClick={() => {
+              setViewMode((prev) => (prev === 'playlists' ? 'home' : 'playlists'));
+              setSearchQuery('');
+            }}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl border text-xs font-mono transition-all hover:scale-105 active:scale-95 cursor-pointer ${
+              viewMode === 'playlists'
+                ? 'bg-gradient-to-r from-blue-600/30 to-cyan-600/30 border-blue-500/50 text-white shadow-[0_0_15px_rgba(59,130,246,0.35)]'
+                : 'bg-white/[0.04] hover:bg-white/[0.08] border-white/10 text-zinc-300 hover:text-white'
+            }`}
+            title="Open Custom Mixtapes & Playlists"
+          >
+            <ListMusic
+              className={`w-3.5 h-3.5 transition-colors ${
+                viewMode === 'playlists'
+                  ? 'text-cyan-400'
+                  : 'text-zinc-400 group-hover:text-cyan-300'
+              }`}
+            />
+            <span className="font-semibold">PLAYLISTS</span>
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/10 text-zinc-300 font-mono font-bold">
+              {playlists.length}
+            </span>
+          </button>
+
+          {(viewMode === 'album' || viewMode === 'liked' || viewMode === 'playlists' || searchQuery.trim() !== '') && (
             <button
               onClick={() => {
                 setViewMode('home');
@@ -1045,8 +1110,24 @@ export function App() {
           />
         )}
 
+        {/* VIEW 4: CUSTOM MIXTAPES & USER PLAYLISTS */}
+        {viewMode === 'playlists' && !filteredSongs && (
+          <PlaylistsView
+            playlists={playlists}
+            currentSong={currentSong}
+            isPlaying={isPlaying}
+            onPlaySong={(song) => playSong(song)}
+            onBack={() => setViewMode('home')}
+            onOpenCreate={() => {
+              setSongForPlaylist(currentSong);
+              setIsAddToPlaylistOpen(true);
+            }}
+            onRefresh={() => setPlaylists(getStoredPlaylists())}
+          />
+        )}
+
         {/* VIEW 2: ALBUM DETAIL VIEW (SLIDES TO SIDE & DISPLAYS TRACKS SMOOTHLY) */}
-        {(viewMode === 'album' || (filteredSongs && viewMode !== 'liked')) && (
+        {(viewMode === 'album' || (filteredSongs && viewMode !== 'liked' && viewMode !== 'playlists')) && (
           <div className="relative w-full h-full max-w-6xl mx-auto px-8 flex flex-col md:flex-row items-center justify-between gap-10 overflow-y-auto pt-4 pb-12 animate-album-glide">
             {/* Left: Showcase Pedestal of Active Album with bottom-up fade */}
             <div className="w-full md:w-80 shrink-0 flex flex-col items-center md:items-start space-y-5 text-center md:text-left animate-slide-up">
@@ -1214,6 +1295,19 @@ export function App() {
                         <Heart className={`w-4 h-4 ${isSongLiked(song.id) ? 'fill-purple-400' : ''}`} />
                       </button>
 
+                      {/* Add to Playlist Quick Action */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSongForPlaylist(song);
+                          setIsAddToPlaylistOpen(true);
+                        }}
+                        className="p-1.5 rounded-lg text-zinc-600 hover:text-cyan-400 hover:scale-110 active:scale-90 transition-all cursor-pointer opacity-0 group-hover:opacity-100"
+                        title="Add to Playlist"
+                      >
+                        <ListPlus className="w-4 h-4" />
+                      </button>
+
                       <span className="hidden sm:inline-block px-2.5 py-0.5 rounded-md text-[10px] font-mono tracking-wider bg-white/5 text-zinc-400 border border-white/5">
                         {song.bitrate}
                       </span>
@@ -1325,6 +1419,19 @@ export function App() {
                             title={isSongLiked(song.id) ? 'Remove from Liked Songs' : 'Save to Liked Songs'}
                           >
                             <Heart className={`w-4 h-4 ${isSongLiked(song.id) ? 'fill-purple-400' : ''}`} />
+                          </button>
+
+                          {/* Add to Playlist Quick Action */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSongForPlaylist(song);
+                              setIsAddToPlaylistOpen(true);
+                            }}
+                            className="p-1.5 rounded-lg text-zinc-600 hover:text-cyan-400 hover:scale-110 active:scale-90 transition-all cursor-pointer opacity-0 group-hover:opacity-100"
+                            title="Add to Playlist"
+                          >
+                            <ListPlus className="w-4 h-4" />
                           </button>
 
                           <span className="px-2.5 py-0.5 rounded-md text-[10px] font-mono tracking-wider bg-blue-500/10 text-blue-300 border border-blue-500/20">
@@ -1505,6 +1612,19 @@ export function App() {
               }`}
             />
           </button>
+
+          {/* Add to Playlist Button for Current Song */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setSongForPlaylist(currentSong);
+              setIsAddToPlaylistOpen(true);
+            }}
+            className="p-2 rounded-xl transition-all cursor-pointer shrink-0 text-zinc-500 hover:text-cyan-400 hover:scale-115 active:scale-90"
+            title="Add to Playlist"
+          >
+            <ListPlus className="w-4.5 h-4.5" />
+          </button>
         </div>
 
         {/* Center: Controls, Scrubber & Visualizer */}
@@ -1639,6 +1759,19 @@ export function App() {
               />
             </div>
           </div>
+
+          {/* Floating Mini-Player Toggle Button */}
+          <button
+            onClick={() => setIsMiniPlayerOpen((prev) => !prev)}
+            className={`p-2 rounded-xl transition-all cursor-pointer ${
+              isMiniPlayerOpen
+                ? 'text-cyan-400 bg-cyan-500/20 border border-cyan-500/40 shadow-[0_0_15px_rgba(56,189,248,0.35)]'
+                : 'text-zinc-400 hover:text-white hover:bg-white/5 active:scale-95'
+            }`}
+            title="Floating Mini Player (P)"
+          >
+            <PictureInPicture2 className="w-5 h-5" />
+          </button>
         </div>
       </footer>
 
@@ -1693,13 +1826,43 @@ export function App() {
       />
 
       {/* 1-CLICK AUTOMATIC UPDATE PROMPT BANNER */}
-      {!isUpdateBannerDismissed && (
+      {!isUpdateBannerDismissed && hasGitHubUpdate && (
         <UpdateNotificationBanner
           hasUpdate={hasGitHubUpdate}
           latestCommit={latestGitHubCommit}
-          onDismiss={() => setIsUpdateBannerDismissed(true)}
+          onDismiss={() => {
+            setIsUpdateBannerDismissed(true);
+            setHasGitHubUpdate(false);
+          }}
         />
       )}
+
+      {/* FLOATING MINI-PLAYER (PIP) */}
+      <MiniPlayer
+        isOpen={isMiniPlayerOpen}
+        onClose={() => setIsMiniPlayerOpen(false)}
+        song={currentSong}
+        isPlaying={isPlaying}
+        onTogglePlay={togglePlay}
+        onNext={handleNext}
+        onPrev={handlePrev}
+        currentTime={currentTime}
+        duration={duration}
+        onSeek={handleSeekTime}
+        volume={volume}
+        onVolumeChange={setVolume}
+        isMuted={isMuted}
+        onToggleMute={() => setIsMuted((prev) => !prev)}
+        isLiked={isSongLiked(currentSong.id)}
+        onToggleLike={() => toggleLikeSong(currentSong)}
+      />
+
+      {/* ADD TO PLAYLIST MODAL */}
+      <AddToPlaylistModal
+        isOpen={isAddToPlaylistOpen}
+        onClose={() => setIsAddToPlaylistOpen(false)}
+        song={songForPlaylist}
+      />
 
       {/* APPLE-STYLE CURSIVE WELCOME SIGN-IN OVERLAY */}
       <WelcomeOverlay

@@ -27,6 +27,16 @@ export interface Album {
   description: string;
 }
 
+export interface Playlist {
+  id: string;
+  name: string;
+  description: string;
+  coverUrl?: string;
+  accentColor: string;
+  createdAt: number;
+  songs: Song[];
+}
+
 export interface ProxmoxConfig {
   host: string;
   port: number;

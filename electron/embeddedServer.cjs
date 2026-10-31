@@ -2,6 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
+const { discordRpc } = require('./discordRpc.cjs');
 
 function getMimeType(filePath) {
   const ext = path.extname(filePath).toLowerCase();
@@ -136,6 +137,44 @@ function startEmbeddedStreamer(port = 5173, distDir, songsDir) {
         mode: 'standalone-lossless',
         timestamp: new Date().toISOString(),
       }));
+      return;
+    }
+
+    // 1.5 Discord Rich Presence Endpoint
+    if (req.url.startsWith('/api/discord/presence')) {
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204, {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Accept',
+        });
+        res.end();
+        return;
+      }
+      if (req.method === 'POST') {
+        let body = '';
+        req.on('data', (c) => { body += c.toString(); });
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body);
+            discordRpc.setActivity(data);
+          } catch {}
+          res.writeHead(200, {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          });
+          res.end(JSON.stringify({ success: true, connected: discordRpc.isConnected }));
+        });
+        return;
+      }
+    }
+
+    if (req.url.startsWith('/api/discord/status')) {
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      });
+      res.end(JSON.stringify({ connected: discordRpc.isConnected }));
       return;
     }
 

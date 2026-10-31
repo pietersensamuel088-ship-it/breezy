@@ -39,16 +39,14 @@ export function UpdateNotificationBanner({
     setIsUpdating(true);
     setStatusMessage('Applying update...');
 
-    // Permanently record that user acted on this commit
-    if (latestCommit?.sha) {
-      dismissUpdate(latestCommit.sha);
-    }
+    // Permanently record that user acted on this update
+    dismissUpdate(latestCommit?.sha);
 
     try {
       if (window.electronAPI?.autoUpdateAndRestart) {
         const res = await window.electronAPI.autoUpdateAndRestart();
         if (res.isPackaged) {
-          setStatusMessage('Updated! Ready.');
+          setStatusMessage('Updated! Running latest release.');
           setTimeout(() => {
             onDismiss();
           }, 1200);
@@ -71,7 +69,6 @@ export function UpdateNotificationBanner({
       }
     } catch {
       onDismiss();
-      window.location.reload();
     }
   };
 

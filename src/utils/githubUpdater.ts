@@ -4,7 +4,7 @@ declare const __APP_COMMIT_SHA__: string | undefined;
 export const CURRENT_COMMIT_SHA =
   typeof __APP_COMMIT_SHA__ !== 'undefined' && __APP_COMMIT_SHA__
     ? __APP_COMMIT_SHA__.substring(0, 7)
-    : '3fa3f5c';
+    : '90887a0';
 
 export const GITHUB_REPO = 'pietersensamuel088-ship-it/breezy';
 
@@ -18,11 +18,15 @@ export interface GitHubCommitInfo {
 
 /**
  * Permanently dismisses or acknowledges an update for a specific commit SHA
+ * and records timestamp to prevent nagging loops across reloads.
  */
-export function dismissUpdate(sha: string) {
+export function dismissUpdate(sha?: string) {
   try {
-    if (typeof localStorage !== 'undefined' && sha) {
-      localStorage.setItem('breezy_dismissed_update_sha', sha);
+    if (typeof localStorage !== 'undefined') {
+      if (sha) {
+        localStorage.setItem('breezy_dismissed_update_sha', sha);
+      }
+      localStorage.setItem('breezy_dismissed_update_time', Date.now().toString());
     }
   } catch {}
 }
@@ -32,7 +36,18 @@ export function dismissUpdate(sha: string) {
  */
 export function isUpdateDismissed(sha: string): boolean {
   try {
-    if (typeof localStorage === 'undefined' || !sha) return false;
+    if (typeof localStorage === 'undefined') return false;
+
+    // Check if dismissed within the last 24 hours (prevents nagging loop on refresh)
+    const dismissedTime = localStorage.getItem('breezy_dismissed_update_time');
+    if (dismissedTime) {
+      const elapsed = Date.now() - parseInt(dismissedTime, 10);
+      if (elapsed < 24 * 60 * 60 * 1000) {
+        return true;
+      }
+    }
+
+    if (!sha) return false;
     const dismissed = localStorage.getItem('breezy_dismissed_update_sha');
     if (!dismissed) return false;
     return (

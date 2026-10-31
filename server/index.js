@@ -8,6 +8,7 @@ import { Readable } from 'stream';
 import { getOrDownloadTrack } from './downloader.js';
 import { streamAudioFile } from './streamer.js';
 import { pool, initDatabase } from './db.js';
+import { discordRpc } from './discordRpc.js';
 
 dotenv.config();
 
@@ -30,6 +31,17 @@ app.get('/api/health', (req, res) => {
     mode: 'on-demand-autonomous',
     timestamp: new Date().toISOString(),
   });
+});
+
+// 1.5 Discord Rich Presence Endpoint (Works for both Web & Desktop)
+app.post('/api/discord/presence', (req, res) => {
+  const { title, artist, album, duration, position, isPlaying, coverUrl } = req.body || {};
+  discordRpc.setActivity({ title, artist, album, duration, position, isPlaying, coverUrl });
+  res.json({ success: true, connected: discordRpc.isConnected });
+});
+
+app.get('/api/discord/status', (req, res) => {
+  res.json({ connected: discordRpc.isConnected });
 });
 
 // 2. On-Demand Stream Endpoint (Spotify-like: zero client disk space)

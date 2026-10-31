@@ -17,13 +17,14 @@ class DiscordRpc {
     this.connect();
   }
 
-  getSocketPath(id = 0) {
+  getSocketPath(id = 0, variant = 0) {
+    const type = variant === 0 ? 'ipc' : 'rpc';
     if (process.platform === 'win32') {
-      return `\\\\?\\pipe\\discord-rpc-${id}`;
+      return `\\\\.\\pipe\\discord-${type}-${id}`;
     }
     const { env: { XDG_RUNTIME_DIR, TMPDIR, TMP, TEMP } } = process;
     const prefix = fs.realpathSync(XDG_RUNTIME_DIR || TMPDIR || TMP || TEMP || `${path.sep}tmp`);
-    return path.join(prefix, `discord-rpc-${id}`);
+    return path.join(prefix, `discord-${type}-${id}`);
   }
 
   encodeFrame(opcode, data) {
@@ -36,14 +37,17 @@ class DiscordRpc {
     return buf;
   }
 
-  connect(pipeId = 0) {
+  connect(pipeId = 0, variant = 0) {
     if (this.socket || this.isConnected || this.isHandshaking) return;
     if (pipeId > 9) {
-      this.reconnectTimer = setTimeout(() => this.connect(0), 15000);
+      if (variant === 0) {
+        return this.connect(0, 1);
+      }
+      this.reconnectTimer = setTimeout(() => this.connect(0, 0), 15000);
       return;
     }
 
-    const socketPath = this.getSocketPath(pipeId);
+    const socketPath = this.getSocketPath(pipeId, variant);
     this.isHandshaking = true;
 
     try {
@@ -63,10 +67,16 @@ class DiscordRpc {
           const raw = data.slice(8, 8 + len).toString('utf8');
           const parsed = JSON.parse(raw);
 
+          if (parsed.code === 4000) {
+            console.warn(`[Discord RPC] Note: Discord returned code 4000 (${parsed.message || 'Invalid Client ID'}). A Discord Application ID can be set in Settings.`);
+            this.cleanup();
+            return;
+          }
+
           if (opcode === 1 && parsed.cmd === 'DISPATCH' && parsed.evt === 'READY') {
             this.isConnected = true;
             this.isHandshaking = false;
-            console.log('[Discord RPC] Connected successfully to Discord client!');
+            console.log('[Discord RPC] Connected successfully to Discord client via', socketPath);
             if (this.lastActivity) {
               this.sendActivity(this.lastActivity);
             }
@@ -76,13 +86,13 @@ class DiscordRpc {
 
       sock.on('error', () => {
         this.cleanup();
-        this.connect(pipeId + 1);
+        this.connect(pipeId + 1, variant);
       });
 
       sock.on('close', () => {
         this.cleanup();
         if (!this.reconnectTimer) {
-          this.reconnectTimer = setTimeout(() => this.connect(0), 15000);
+          this.reconnectTimer = setTimeout(() => this.connect(0, 0), 15000);
         }
       });
     } catch {
@@ -99,10 +109,15 @@ class DiscordRpc {
     }
   }
 
-  setActivity({ title, artist, album, duration = 0, position = 0, isPlaying = true, coverUrl = '' }) {
+  setActivity({ title, artist, album, duration = 0, position = 0, isPlaying = true, coverUrl = '', clientId = '' }) {
+    if (clientId && clientId !== this.clientId) {
+      this.clientId = clientId;
+      this.cleanup();
+      this.connect(0, 0);
+    }
     this.lastActivity = { title, artist, album, duration, position, isPlaying, coverUrl };
     if (!this.isConnected) {
-      this.connect(0);
+      this.connect(0, 0);
       return;
     }
     this.sendActivity(this.lastActivity);

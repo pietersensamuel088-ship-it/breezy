@@ -11,9 +11,17 @@ import {
   Laptop,
   Server,
   Wifi,
-  WifiOff
+  WifiOff,
+  Radio
 } from 'lucide-react';
 import { checkForGitHubUpdate, CURRENT_COMMIT_SHA, GitHubCommitInfo } from '../utils/githubUpdater';
+import {
+  isDiscordRpcEnabled,
+  setDiscordRpcEnabled,
+  getDiscordClientId,
+  setDiscordClientId,
+  checkDiscordRpcStatus,
+} from '../utils/discordBridge';
 
 interface UserHubModalProps {
   isOpen: boolean;
@@ -38,11 +46,18 @@ export function UserHubModal({ isOpen, onClose, currentUser, onSwitchUser }: Use
   const [pingLatency, setPingLatency] = useState<number | null>(null);
   const [isApplyingUpdate, setIsApplyingUpdate] = useState<boolean>(false);
 
-  // Check GitHub when modal opens
+  // Discord Rich Presence State
+  const [discordRpcOn, setDiscordRpcOn] = useState<boolean>(isDiscordRpcEnabled);
+  const [discordConnected, setDiscordConnected] = useState<boolean>(false);
+  const [discordClientIdInput, setDiscordClientIdInput] = useState<string>(getDiscordClientId);
+  const [savedClientIdMsg, setSavedClientIdMsg] = useState<string>('');
+
+  // Check GitHub & Discord when modal opens
   useEffect(() => {
     if (isOpen) {
       handleCheckUpdate();
       testBackendConnection(backendUrl);
+      checkDiscordRpcStatus().then(setDiscordConnected);
     }
   }, [isOpen]);
 
@@ -359,6 +374,92 @@ pause
             <Download className="w-4 h-4 text-luxury-gold" />
             <span className="font-semibold">Download Breezy-Launcher.bat</span>
           </button>
+        </div>
+
+        {/* Discord Rich Presence Hub */}
+        <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/5 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Radio className="w-4 h-4 text-[#5865F2]" />
+              <span className="text-xs font-mono font-semibold uppercase tracking-wider text-zinc-300">
+                Discord Rich Presence
+              </span>
+            </div>
+
+            <button
+              onClick={() => {
+                const next = !discordRpcOn;
+                setDiscordRpcOn(next);
+                setDiscordRpcEnabled(next);
+              }}
+              className={`px-3 py-1 rounded-full text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                discordRpcOn
+                  ? 'bg-[#5865F2] text-white shadow-[0_0_15px_rgba(88,101,242,0.5)]'
+                  : 'bg-white/10 text-zinc-400 hover:text-white'
+              }`}
+            >
+              {discordRpcOn ? 'ENABLED' : 'DISABLED'}
+            </button>
+          </div>
+
+          <p className="text-xs text-zinc-400 font-sans leading-relaxed">
+            Broadcasts your currently playing track, artist, album, and live timestamps to your Discord profile status in real time. Works automatically on both the desktop app and website version!
+          </p>
+
+          <div className="flex items-center justify-between text-xs font-mono pt-1 text-zinc-400">
+            <span>Discord IPC Pipe:</span>
+            <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] ${
+              discordConnected
+                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                : 'bg-white/5 text-zinc-400 border border-white/10'
+            }`}>
+              {discordConnected ? 'CONNECTED' : 'LISTENING ON PIPE'}
+            </span>
+          </div>
+
+          <div className="pt-2 space-y-1.5 border-t border-white/[0.06]">
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">
+                Custom Discord Application ID (Optional)
+              </label>
+              {savedClientIdMsg && (
+                <span className="text-[10px] font-mono text-emerald-400 font-bold animate-fadeIn">
+                  {savedClientIdMsg}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={discordClientIdInput}
+                onChange={(e) => setDiscordClientIdInput(e.target.value)}
+                placeholder="Enter Application ID"
+                className="flex-1 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs font-mono text-white placeholder-zinc-600 focus:outline-none focus:border-[#5865F2] transition-all"
+              />
+              <button
+                onClick={() => {
+                  setDiscordClientId(discordClientIdInput);
+                  setSavedClientIdMsg('Saved!');
+                  setTimeout(() => setSavedClientIdMsg(''), 2500);
+                }}
+                className="px-3.5 py-2 rounded-xl bg-[#5865F2]/20 hover:bg-[#5865F2]/30 border border-[#5865F2]/40 text-xs font-mono text-white font-semibold transition-all cursor-pointer whitespace-nowrap"
+              >
+                Save
+              </button>
+            </div>
+            <p className="text-[10px] text-zinc-500 font-sans">
+              To customize the name and art shown on your Discord profile, create a free application at{' '}
+              <a
+                href="https://discord.com/developers/applications"
+                target="_blank"
+                rel="noreferrer"
+                className="text-blue-400 underline hover:text-blue-300"
+              >
+                discord.com/developers
+              </a>{' '}
+              and paste your Application ID here.
+            </p>
+          </div>
         </div>
       </div>
     </div>

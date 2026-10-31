@@ -57,6 +57,16 @@ export function updateDiscordPresence(
   }
 }
 
+export function getDiscordClientId(): string {
+  if (typeof window === 'undefined') return '';
+  return localStorage.getItem('breezy_discord_client_id') || '';
+}
+
+export function setDiscordClientId(id: string) {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem('breezy_discord_client_id', id.trim());
+}
+
 async function sendPresencePayload(
   song: Song,
   isPlaying: boolean,
@@ -64,6 +74,7 @@ async function sendPresencePayload(
   duration: number
 ) {
   try {
+    const customClientId = getDiscordClientId();
     const payload = {
       title: song.title,
       artist: song.artist,
@@ -72,6 +83,7 @@ async function sendPresencePayload(
       position: Math.round(currentTime || 0),
       isPlaying,
       coverUrl: song.coverUrl,
+      ...(customClientId ? { clientId: customClientId } : {}),
     };
 
     // Use current origin if http, or localhost:5173 / custom backend

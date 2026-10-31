@@ -142,10 +142,16 @@ class DiscordRpc {
     const now = Date.now();
     const remainingMs = Math.max(0, (act.duration - act.position) * 1000);
 
+    const artist = (act.artist || 'Unknown').trim();
+    const isCustomApp = this.clientId && this.clientId !== DEFAULT_CLIENT_ID;
+    const stateText = isCustomApp
+      ? (artist ? `${artist} • Saint Player` : 'Saint Player')
+      : (artist ? `${artist} • Breezy Saint Player` : 'Breezy Saint Player');
+
     const activity = {
       type: 2, // 2 = LISTENING to
       details: (act.title || 'Master Track').slice(0, 128),
-      state: `by ${(act.artist || 'Unknown')}`.slice(0, 128),
+      state: stateText.slice(0, 128),
       timestamps: {
         start: Math.round(now - (act.position * 1000)),
         ...(act.duration > 0 ? { end: Math.round(now + remainingMs) } : {}),
@@ -153,9 +159,10 @@ class DiscordRpc {
     };
 
     if (act.coverUrl && act.coverUrl.startsWith('http')) {
+      const album = act.album ? `${act.album} • ` : '';
       activity.assets = {
         large_image: act.coverUrl,
-        large_text: (act.album || 'Breezy Master Audio').slice(0, 128),
+        large_text: `${album}Breezy Saint Player`.slice(0, 128),
       };
     }
 
